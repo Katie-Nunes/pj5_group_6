@@ -8,7 +8,7 @@ expected_columns = ['start location', 'end location', 'start time', 'end time', 
 expected_dtypes = {'start location': dtype('O'), 'end location': dtype('O'), 'start time': dtype('O'), 'end time': dtype('O'), 'activity': dtype('O'), 'line': dtype('float64'), 'energy consumption': dtype('float64'), 'bus': dtype('int64')}
 
 def main (df, expected_columns, expected_dtypes):
-    validate_dataframe_stexpected_dtypesructure(df, expected_columns, expected_dtypes)
+    validate_dataframe_structure(df, expected_columns, expected_dtypes)
 
 def get_dtype (df):
     expected_dtypes = dict(df.dtypes)
