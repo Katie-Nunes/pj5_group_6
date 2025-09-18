@@ -130,10 +130,3 @@ def check_for_innacuracies (df, expected_columns, expected_dtypes, timetable, di
     validate_energy_consumption(df, distancematrix)
     return df
 
-def calculate_insights(df):
-
-    pass
-    #return insights_df
-
-#def check_feasibility ():
-#    pass
