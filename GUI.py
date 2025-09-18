@@ -2,11 +2,10 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import pathlib
-from main import preprocess_planning
+from check_innacuracies import _preprocess_planning
 
 # Page config
 st.set_page_config(page_title="Bus Planning App Dashboard", page_icon="📥", layout="wide")
-
 
 def make_gantt(df):
     fig = px.timeline(df, x_start="start_dt", x_end="finish_dt", y="bus_str", color="activity",
@@ -53,7 +52,7 @@ with right:
         st.info("Upload a Bus Planning file (.xlsx) to generate the Gantt chart.")
     else:
         try:
-            gantt_df = preprocess_planning(planning_df)
+            gantt_df = _preprocess_planning(planning_df)
             st.success(f"Loaded {len(gantt_df)} trips for {gantt_df['bus'].nunique()} bus(es).")
             st.plotly_chart(make_gantt(gantt_df), use_container_width=True)
         except Exception as e:
