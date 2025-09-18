@@ -30,7 +30,7 @@ def check_locations(df, timetable, distancematrix, discard):
     return []
 
 
-def check_energy_consumption(df, distancematrix):
+def check_energy_consumption(df, distancematrix, idle_cost_ph, charge_speed: float, low_charge_rate: float, high_charge_rate: float, low_energy_use, high_energy_use, low_idle_cost, high_idle_cost):
     """Pure check: Validate energy consumption rules without modifying data."""
     errors = []
 
@@ -46,9 +46,9 @@ def check_energy_consumption(df, distancematrix):
             minutes = row['time_taken'].total_seconds() / 60.0
 
             if activity == 'charging':
-                low = -7.5 * minutes * 1.1
-                high = -7.5 * minutes * 0.9
-                if not (low < energy < high):
+                low = -charge_speed * minutes * low_charge_rate
+                high = -charge_speed * minutes * high_charge_rate
+                if not (high < energy < low):
                     errors.append(f"Row {idx}: Charging energy {energy:.2f} outside range ({low:.2f}, {high:.2f})")
 
             elif activity in ('material trip', 'service trip'):
@@ -59,15 +59,15 @@ def check_energy_consumption(df, distancematrix):
                     errors.append(f"Row {idx}: No distance found for trip {start_loc} -> {end_loc}")
                 else:
                     distance_km = distance_m / 1000.0
-                    low = 0.7 * distance_km
-                    high = 2.5 * distance_km
+                    low = low_energy_use * distance_km
+                    high = high_energy_use * distance_km
                     if not (low <= energy <= high):
                         errors.append(
                             f"Row {idx}: {activity} energy {energy:.2f} outside range ({low:.2f}, {high:.2f}) for {distance_km:.2f}km")
 
             elif activity == 'idle':
-                low = (5 / 60) * minutes * 0.90
-                high = (5 / 60) * minutes * 1.1
+                low = (idle_cost_ph / 60) * minutes * low_idle_cost
+                high = (idle_cost_ph / 60) * minutes * high_idle_cost
                 if not (low < energy < high):
                     errors.append(f"Row {idx}: Idle energy {energy:.2f} outside range ({low:.2f}, {high:.2f})")
 
@@ -117,9 +117,9 @@ def fill_gaps_with_idle(df):
                 print(f"Info: Inserted idle row for {gap_duration} gap between {gap_start} and {gap_end}")
         result_rows.append(row)
         prev_row = row
+    df = pd.DataFrame(result_rows).reset_index(drop=True)
 
-    return pd.DataFrame(result_rows).reset_index(drop=True)
-
+    return df
 
 def fix_charging_energy(df):
     """Execution: Fix charging energy values to standard rate."""
@@ -134,19 +134,17 @@ def fix_charging_energy(df):
 def preprocess_planning(df, ref_date=None):
     """Execution: Standardize columns and compute time fields."""
     ref_date = ref_date or date.today()
-    df = df.copy()  # Avoid modifying original
     df.columns = df.columns.str.strip().str.lower()
 
     if missing := TIME_COLS - set(df.columns):
         raise ValueError(f"Missing columns: {missing}")
 
+    df["line"] = df["line"].fillna(999)
     # Coerce time columns to datetime
     df["start_dt"] = _coerce(df["start time"], ref_date)
     df["finish_dt"] = _coerce(df["end time"], ref_date)
     df.loc[df["finish_dt"] < df["start_dt"], "finish_dt"] += timedelta(days=1)
     df["time_taken"] = df["finish_dt"] - df["start_dt"]
-    df["bus_str"] = "Bus " + df["bus"].astype(str)
-
     return df
 
 
@@ -163,21 +161,20 @@ def check_for_innacuracies(df, expected_columns, expected_dtypes, timetable, dis
         validate_dataframe_structure(df, expected_columns, expected_dtypes)
     except Exception as e:
         print(f"CRITICAL STRUCTURE ERROR: {e}", file=sys.stderr)
-        return df  # Return original df to prevent further processing
+         # Return original df to prevent further processing
 
     try:
         # Step 2: Preprocess data (execution)
         df = preprocess_planning(df, ref_date)
     except Exception as e:
         print(f"PREPROCESSING ERROR: {e}", file=sys.stderr)
-        return df
 
     # Step 3: Run pure checks and report errors
     location_errors = check_locations(df, timetable, distancematrix, 'ehvgar')
     for err in location_errors:
         print(f"LOCATION ERROR: {err}")
 
-    energy_errors = check_energy_consumption(df, distancematrix)
+    energy_errors = check_energy_consumption(df, distancematrix, 5, 7.5, 0.9, 1.1, 0.7, 2.5, 0.9, 1.1 )
     for err in energy_errors:
         print(f"ENERGY ERROR: {err}")
 
