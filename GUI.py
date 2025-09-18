@@ -1,29 +1,12 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime, date, timedelta
 import pathlib
+from main import preprocess_planning
 
 # Page config
 st.set_page_config(page_title="Bus Planning App Dashboard", page_icon="📥", layout="wide")
-# Helper functions
-TIME_COLS = {"start time", "end time"}
 
-def _coerce(series, ref_date):
-    t = pd.to_datetime(series.astype(str), format='%H:%M:%S').dt.time
-    return pd.to_datetime([datetime.combine(ref_date, x) for x in t])
-
-def preprocess_planning(df, ref_date=None):
-    ref_date = ref_date or date.today()
-    df.columns = df.columns.str.strip().str.lower()
-    if missing := TIME_COLS - set(df.columns):
-        raise ValueError(f"Missing columns: {missing}")
-
-    df["start_dt"] = _coerce(df["start time"], ref_date)
-    df["finish_dt"] = _coerce(df["end time"], ref_date)
-    df.loc[df["finish_dt"] < df["start_dt"], "finish_dt"] += timedelta(days=1)
-    df["bus_str"] = "Bus " + df["bus"].astype(str)
-    return df
 
 def make_gantt(df):
     fig = px.timeline(df, x_start="start_dt", x_end="finish_dt", y="bus_str", color="activity",
@@ -78,6 +61,7 @@ with right:
 
     st.markdown("---")
     st.subheader("Insights (Dummy Data for Now)")
+
     insights_df = pd.DataFrame({
         "Metric": ["Data Quality", "Rows", "Missing Values", "Exec Time (s)"],
         "Value": ["85 %", "10 520", "45 (0.4 %)", "12.5"],
