@@ -12,8 +12,7 @@ def make_gantt(df):
                      hover_data=["start location", "end location", "line", "energy consumption"],
                      title="Bus Planning – Daily Gantt")
     fig.update_yaxes(autorange="reversed")
-    fig.update_layout(xaxis_title="Time", yaxis_title="", legend_title="Activity",
-                     font_size=13, title_font_size=22)
+    fig.update_layout(xaxis_title="Time", yaxis_title="", legend_title="Activity", font_size=13, title_font_size=22)
     return fig
 
 # Page body
