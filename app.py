@@ -20,8 +20,20 @@ with (right):
     st.header("Production")
     st.subheader("Gantt Chart")
 
+
     if planning_df is None:
-        st.info("Upload Bus Planning file to view Gantt chart.")
+        st.info("Upload all Bus Planning to view Gantt chart.")
+    else:
+        try:
+            gantt_df = preprocess_planning(planning_df)
+            st.success(f"Loaded {len(gantt_df)} trips for {gantt_df['bus'].nunique()} bus(es).")
+            st.plotly_chart(make_gantt(gantt_df), use_container_width=True)
+        except Exception as e:
+            st.error(f"Could not build Gantt chart: {e}")
+
+## "Improved" Gantt chart, runs check for innacuracies
+    if planning_df is None or timetable_df is None or distancematrix_df is None:
+        st.info("Upload all files to view Improved Gantt chart.")
     else:
         try:
             expected_columns = ['start location', 'end location', 'start time', 'end time', 'activity', 'line',
@@ -29,23 +41,12 @@ with (right):
             expected_dtypes = {'start location': dtype('O'), 'end location': dtype('O'), 'start time': dtype('O'),
                                'end time': dtype('O'), 'activity': dtype('O'), 'line': dtype('float64'),
                                'energy consumption': dtype('float64'), 'bus': dtype('int64'), 'start_dt': dtype('datetime64[ns]'), 'finish_dt': dtype('datetime64[ns]'), 'time_taken': dtype('timedelta64[ns]')}
-            print("imported expectation")
-            gantt_df = preprocess_planning(planning_df)
-            print("initial prepro")
-            gantt_df = check_for_inaccuracies(gantt_df, expected_columns, expected_dtypes, timetable_df, distancematrix_df)
-            print("Made df")
+            gantt_df = check_for_inaccuracies(planning_df, expected_columns, expected_dtypes, timetable_df, distancematrix_df)
             st.success(f"Loaded {len(gantt_df)} trips for {gantt_df['bus'].nunique()} bus(es).")
-            print(f"Loaded {len(gantt_df)} trips for {gantt_df['bus'].nunique()} bus(es).")
-            fig = make_gantt(gantt_df)
-            print("Made fig")
-            fig.show()
-            print("Show fig")
-            st.plotly_chart(fig.show(), use_container_width=True)
-            print("Show in streamlit")
+            st.plotly_chart(make_gantt(gantt_df), use_container_width=True)
         except Exception as e:
             st.error(f"Could not build Gantt chart: {e}")
 
-    st.markdown("---")
     st.subheader("Insights")
 
     if planning_df is None or timetable_df is None or distancematrix_df is None:
@@ -53,9 +54,7 @@ with (right):
     else:
         display_insights()
 
-    st.markdown("---")
     st.subheader("View Files")
-
 
     if planning_df is None or timetable_df is None or distancematrix_df is None:
         st.info("Upload all files to view Files.")

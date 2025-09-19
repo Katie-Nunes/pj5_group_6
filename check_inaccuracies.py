@@ -106,20 +106,32 @@ def fill_gaps_with_idle(df):
         if prev_row is not None:
             gap_start = prev_row['finish_dt']
             gap_end = row['start_dt']
-            if gap_start < gap_end:
-                gap_duration = gap_end - gap_start
-                idle_row = prev_row.copy()
-                idle_row['start_dt'] = gap_start
-                idle_row['finish_dt'] = gap_end
-                idle_row['activity'] = 'idle'
-                result_rows.append(idle_row)
-                # Execution logging (not error)
-                print(f"Info: Inserted idle row for {gap_duration} gap between {gap_start} and {gap_end}")
-        result_rows.append(row)
-        prev_row = row
-    df = pd.DataFrame(result_rows).reset_index(drop=True)
 
-    return df
+            # Skip if no gap (or negative gap due to overlap)
+            if pd.isna(gap_start) or pd.isna(gap_end) or gap_start >= gap_end:
+                pass  # No idle needed
+            else:
+                gap_duration = gap_end - gap_start
+                # Create idle row using prev_row as base, but reset activity-specific fields
+                idle_dict = prev_row.to_dict()
+                idle_dict['start_dt'] = gap_start
+                idle_dict['finish_dt'] = gap_end
+                idle_dict['activity'] = 'idle'
+                idle_dict['start location'] = prev_row['end location']
+                idle_dict['end location'] = row['start location']
+                # Reset other fields
+                for col in ['task', 'status', 'work_type']:  # customize
+                    if col in idle_dict:
+                        idle_dict[col] = None
+
+                result_rows.append(idle_dict)
+                print(f"Info: Inserted idle row for {gap_duration} gap between {gap_start} and {gap_end}")
+
+        result_rows.append(row.copy(deep=True))
+        prev_row = row
+
+    result_df = pd.DataFrame(result_rows).reset_index(drop=True)
+    return result_df
 
 def fix_charging_energy(df):
     """Execution: Fix charging energy values to standard rate."""

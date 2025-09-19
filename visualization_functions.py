@@ -3,10 +3,10 @@ import plotly.express as px
 import pandas as pd
 
 
-def make_gantt(df):
-    fig = px.timeline(df, x_start="start_dt", x_end="finish_dt", y="bus", color="activity",
-                     hover_data=["start location", "end location", "line", "energy consumption"],
-                     title="Bus Planning – Daily Gantt")
+def make_gantt(gantt_df):
+    fig = px.timeline(gantt_df, x_start="start_dt", x_end="finish_dt", y="bus", color="activity",
+                      hover_data=["start location", "end location", "line", "energy consumption"],
+                      title="Bus Planning – Daily Gantt")
     fig.update_yaxes(autorange="reversed")
     fig.update_layout(xaxis_title="Time", yaxis_title="", legend_title="Activity",
                      font_size=13, title_font_size=22)
@@ -24,7 +24,6 @@ def load_excel_with_fallback(label, key):
 
     if uploaded_file:
         return pd.read_excel(uploaded_file)
-    st.info(f"Upload {label} to fix errors")
     return None
 
 def display_df(excel):
