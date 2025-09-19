@@ -154,9 +154,10 @@ def _coerce(series, ref_date):
     return pd.to_datetime([datetime.combine(ref_date, x) for x in t])
 
 
-def check_for_innacuracies(df, expected_columns, expected_dtypes, timetable, distancematrix, ref_date=None):
+def check_for_inaccuracies(df, expected_columns, expected_dtypes, timetable, distancematrix, ref_date=None):
     """Centralized error handling and workflow orchestration."""
     try:
+        pass
         # Step 1: Validate structure (must pass)
         validate_dataframe_structure(df, expected_columns, expected_dtypes)
     except Exception as e:
@@ -186,4 +187,5 @@ def check_for_innacuracies(df, expected_columns, expected_dtypes, timetable, dis
     df = fix_charging_energy(df)  # Fix charging energy
     df = fill_gaps_with_idle(df)  # Fix timeline gaps
 
+    df = preprocess_planning(df)
     return df
