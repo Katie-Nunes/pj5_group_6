@@ -32,13 +32,19 @@ def check_locations(df, timetable, distancematrix, discard):
 
 def _coerce(series, ref_date):
     """Helper: Convert time strings to datetime objects."""
-    t = pd.to_datetime(series.astype(str), format='%H:%M:%S').dt.time
+    try:
+        t = pd.to_datetime(series.astype(str), format='%H:%M:%S').dt.time
+    except:
+        t = pd.to_datetime(series.astype(str), format='%H:%M').dt.time
     return pd.to_datetime([datetime.combine(ref_date, x) for x in t])
 
-def rename_time_object(df):
+def rename_time_object(df, start_name, end_name):
     """Execution: Compute time fields."""
-    df["start time"] = _coerce(df["start time"], date.today())
-    df["end time"] = _coerce(df["end time"], date.today())
+    df[start_name] = _coerce(df[start_name], date.today())
+    try:
+        df[end_name] = _coerce(df[end_name], date.today())
+    except:
+        pass
     return df
 
 def check_datetime_sequence(df):
@@ -51,7 +57,7 @@ def check_datetime_sequence(df):
         df = df[df['end time'] > df['start time']]
         errors.append("Some rows have negative duration")
 
-    continuity = df['start time'] == df['end time'].shift(1) # Check if tart is always the same as previous end (finds gaps)
+    continuity = df['start time'] == df['end time'].shift(1) # Check if start is always the same as previous end (finds gaps)
     continuity.iloc[0] = True  # First row always OK
     if not continuity.all():
         errors.append("Datetime sequence has gaps or overlaps")
@@ -94,6 +100,7 @@ def remove_wrong_gaps(df, too_long_for_idle_in_seconds):
 
 def rename_lines(df):
     df["line"] = df["line"].fillna("999")
+    df["line"] = df["line"].astype(int)
     return df
 
 def calc_timedelta(df):
@@ -161,7 +168,7 @@ def check_for_inaccuracies(df, expected_columns, expected_dtypes, timetable, dis
         print(f"LOCATION ERROR: {err}")
 
     try:
-        df = rename_time_object(df)
+        df = rename_time_object(df, 'start time', 'end time')
     except Exception as e:
         print(f"PREPROCESSING ERROR: {e}", file=sys.stderr)
 

@@ -1,6 +1,7 @@
 import pandas as pd
 from numpy import dtype
 from check_inaccuracies import check_for_inaccuracies
+from check_feasbility import check_feasibility
 
 PLANNING = pd.read_excel('Excel Files/Bus Planning.xlsx')
 TIMETABLE = pd.read_excel('Excel Files/Timetable.xlsx')
@@ -11,6 +12,7 @@ expected_dtypes = {'start location': dtype('O'), 'end location': dtype('O'), 'st
 
 def main (planning_df, expected_columns, expected_dtypes, timetable_df, distancematrix_df):
     df = check_for_inaccuracies(planning_df, expected_columns, expected_dtypes, timetable_df, distancematrix_df)
+    check_feasibility(df, 300, 0.85, TIMETABLE)
     return df
     #exec(open("app.py").read())
 
