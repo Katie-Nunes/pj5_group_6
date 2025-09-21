@@ -1,5 +1,5 @@
 import streamlit as st
-from check_inaccuracies import check_for_inaccuracies, rename_time
+from check_inaccuracies import check_for_inaccuracies, rename_time_object
 from visualization_functions import make_gantt, display_df, display_insights, load_excel_with_fallback
 from numpy import dtype
 
@@ -22,9 +22,10 @@ with (right):
         st.info("Upload all Bus Planning to view Gantt chart.")
     else:
         try:
-            gantt_df = rename_time(planning_df)
+            gantt_df = rename_time_object(planning_df)
             st.success(f"Loaded {len(gantt_df)} trips for {gantt_df['bus'].nunique()} bus(es).")
-            st.plotly_chart(make_gantt(gantt_df), use_container_width=True)
+            fig = make_gantt(gantt_df)
+            st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.error(f"Could not build Gantt chart: {e}")
 
