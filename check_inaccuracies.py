@@ -1,8 +1,7 @@
 import pandas as pd
 from datetime import datetime, date, timedelta
 import sys
-
-TIME_COLS = {"start time", "end time"}
+import numpy as np
 
 def validate_dataframe_structure(df, expected_columns, expected_dtypes):
     """Pure check: Validate column names and dtypes without modifying data."""
@@ -14,7 +13,6 @@ def validate_dataframe_structure(df, expected_columns, expected_dtypes):
         actual_dtype = df[col].dtype
         if actual_dtype != expected_dtype:
             raise ValueError(f"Column '{col}' has wrong dtype. Expected: {expected_dtype}, Got: {actual_dtype}")
-
 
 def check_locations(df, timetable, distancematrix, discard):
     """Pure check: Verify location consistency across dataframes."""
@@ -29,6 +27,60 @@ def check_locations(df, timetable, distancematrix, discard):
         return ["Location mismatch: Dataframes have inconsistent location sets"]
     return []
 
+def _coerce(series, ref_date):
+    """Helper: Convert time strings to datetime objects."""
+    t = pd.to_datetime(series.astype(str), format='%H:%M:%S').dt.time
+    return pd.to_datetime([datetime.combine(ref_date, x) for x in t])
+
+def rename_time(df):
+    """Execution: Compute time fields."""
+    df["start time"] = _coerce(df["start time"], date.today())
+    df["end time"] = _coerce(df["end time"], date.today())
+    return df
+
+def check_datetime_sequence(df):
+    """Pure check: Validate datetime continuity and duration."""
+    errors = []
+
+    # Check duration validity
+    if not (df['end time'] > df['start time']).all():
+        errors.append("Some rows have negative duration")
+
+    continuity = df['start time'] == df['end time'].shift(1)
+    continuity.iloc[0] = True  # First row always OK
+    if not continuity.all():
+        errors.append("Datetime sequence has gaps or overlaps")
+        # Good place to ask user for input
+
+    return errors, continuity
+
+def insert_idle_given_row(df: pd.DataFrame, row_idx: int) -> pd.DataFrame:
+    row_to_copy = df.iloc[row_idx].copy()
+    next_row = df.iloc[row_idx +1]
+
+    row_to_copy["start location"] = row_to_copy["end location"]
+    row_to_copy["end location"] = next_row["start location"]
+
+    row_to_copy["start time"] = row_to_copy["end time"]
+    row_to_copy["end time"] = next_row["start time"]
+
+    row_to_copy['activity'] = 'idle'
+    row_to_copy['line'] = np.nan
+
+    top    = df.iloc[:row_idx +1]          # inclusive of row_idx (the original row we just duplicated)
+    bottom = df.iloc[row_idx +1:]          # from the original next row onward
+
+    new_row_df = pd.DataFrame([row_to_copy], columns=df.columns)
+    new_df = pd.concat([top, new_row_df, bottom], ignore_index=True)
+    return new_df
+
+def fill_all_gaps(df: pd.DataFrame, continuity) -> pd.DataFrame:
+    indices_to_insert = continuity[~continuity].index
+
+    # Sort indices in descending order to avoid index shifting issues
+    for idx in sorted(indices_to_insert, reverse=True):
+        df = insert_idle_given_row(df, idx-1)
+    return df
 
 def check_energy_consumption(df, distancematrix, idle_cost_ph, charge_speed: float, low_charge_rate: float, high_charge_rate: float, low_energy_use, high_energy_use, low_idle_cost, high_idle_cost):
     """Pure check: Validate energy consumption rules without modifying data."""
@@ -79,125 +131,52 @@ def check_energy_consumption(df, distancematrix, idle_cost_ph, charge_speed: flo
 
     return errors
 
-
-def check_datetime_sequence(df):
-    """Pure check: Validate datetime continuity and duration."""
-    errors = []
-
-    # Check duration validity
-    if not (df['finish_dt'] > df['start_dt']).all():
-        errors.append("Some rows have negative duration")
-
-    # Check continuity
-    continuity = df['start_dt'] == df['finish_dt'].shift(1)
-    continuity.iloc[0] = True  # First row always OK
-    if not continuity.all():
-        errors.append("Datetime sequence has gaps or overlaps")
-
-    return errors
-
-
-def fill_gaps_with_idle(df):
-    """Execution: Fix timeline gaps by inserting idle rows."""
-    result_rows = []
-    prev_row = None
-
-    for idx, row in df.iterrows():
-        if prev_row is not None:
-            gap_start = prev_row['finish_dt']
-            gap_end = row['start_dt']
-
-            # Skip if no gap (or negative gap due to overlap)
-            if pd.isna(gap_start) or pd.isna(gap_end) or gap_start >= gap_end:
-                pass  # No idle needed
-            else:
-                gap_duration = gap_end - gap_start
-                # Create idle row using prev_row as base, but reset activity-specific fields
-                idle_dict = prev_row.to_dict()
-                idle_dict['start_dt'] = gap_start
-                idle_dict['finish_dt'] = gap_end
-                idle_dict['activity'] = 'idle'
-                idle_dict['start location'] = prev_row['end location']
-                idle_dict['end location'] = row['start location']
-                # Reset other fields
-                for col in ['task', 'status', 'work_type']:  # customize
-                    if col in idle_dict:
-                        idle_dict[col] = None
-
-                result_rows.append(idle_dict)
-                print(f"Info: Inserted idle row for {gap_duration} gap between {gap_start} and {gap_end}")
-
-        result_rows.append(row.copy(deep=True))
-        prev_row = row
-
-    result_df = pd.DataFrame(result_rows).reset_index(drop=True)
-    return result_df
-
 def fix_charging_energy(df):
     """Execution: Fix charging energy values to standard rate."""
     for idx, row in df.iterrows():
         if row['activity'] == 'charging':
-            duration = row['finish_dt'] - row['start_dt']
+            duration = row['end time'] - row['start time']
             minutes = duration.total_seconds() / 60.0
             df.at[idx, 'energy consumption'] = -7.5 * minutes
     return df
 
-
-def preprocess_planning(df, ref_date=None):
-    """Execution: Standardize columns and compute time fields."""
-    ref_date = ref_date or date.today()
-    df.columns = df.columns.str.strip().str.lower()
-
-    if missing := TIME_COLS - set(df.columns):
-        raise ValueError(f"Missing columns: {missing}")
-
-    df["line"] = df["line"].fillna(999)
-    # Coerce time columns to datetime
-    df["start_dt"] = _coerce(df["start time"], ref_date)
-    df["finish_dt"] = _coerce(df["end time"], ref_date)
-    df.loc[df["finish_dt"] < df["start_dt"], "finish_dt"] += timedelta(days=1)
-    df["time_taken"] = df["finish_dt"] - df["start_dt"]
+def rename_lines(df):
+    df["line"] = df["line"].fillna("999")
     return df
 
-
-def _coerce(series, ref_date):
-    """Helper: Convert time strings to datetime objects."""
-    t = pd.to_datetime(series.astype(str), format='%H:%M:%S').dt.time
-    return pd.to_datetime([datetime.combine(ref_date, x) for x in t])
-
+def calc_timedelta(df):
+    df.loc[df["end time"] < df["start time"], "end time"] += timedelta(days=1)
+    df["time_taken"] = df["end time"] - df["start time"]
+    return df
 
 def check_for_inaccuracies(df, expected_columns, expected_dtypes, timetable, distancematrix, ref_date=None):
     """Centralized error handling and workflow orchestration."""
     try:
         pass
-        # Step 1: Validate structure (must pass)
         validate_dataframe_structure(df, expected_columns, expected_dtypes)
     except Exception as e:
         print(f"CRITICAL STRUCTURE ERROR: {e}", file=sys.stderr)
-         # Return original df to prevent further processing
 
-    try:
-        # Step 2: Preprocess data (execution)
-        df = preprocess_planning(df, ref_date)
-    except Exception as e:
-        print(f"PREPROCESSING ERROR: {e}", file=sys.stderr)
-
-    # Step 3: Run pure checks and report errors
     location_errors = check_locations(df, timetable, distancematrix, 'ehvgar')
     for err in location_errors:
         print(f"LOCATION ERROR: {err}")
+
+    try:
+        df = rename_time(df)
+    except Exception as e:
+        print(f"PREPROCESSING ERROR: {e}", file=sys.stderr)
+
+    datetime_errors, cunty = check_datetime_sequence(df)
+    for err in datetime_errors:
+        print(f"DATETIME ERROR: {err}")
+
+    df = fill_all_gaps(df, cunty)
 
     energy_errors = check_energy_consumption(df, distancematrix, 5, 7.5, 0.9, 1.1, 0.7, 2.5, 0.9, 1.1 )
     for err in energy_errors:
         print(f"ENERGY ERROR: {err}")
 
-    datetime_errors = check_datetime_sequence(df)
-    for err in datetime_errors:
-        print(f"DATETIME ERROR: {err}")
-
-    # Step 4: Execute fixes (after reporting errors)
-    df = fix_charging_energy(df)  # Fix charging energy
-    df = fill_gaps_with_idle(df)  # Fix timeline gaps
-
-    df = preprocess_planning(df)
+    df = fix_charging_energy(df)
+    df = rename_lines(df)
+    df = calc_timedelta(df)
     return df
