@@ -11,12 +11,31 @@ def make_gantt(gantt_df):
                      font_size=13, title_font_size=22)
     return fig
 
-def display_insights():
-    insights_df = pd.DataFrame({
-        "Metric": ["Data Quality", "Rows", "Missing Values", "Exec Time (s)"],
-        "Value": ["85 %", "10 520", "45 (0.4 %)", "12.5"],
-        "Status": ["✅ OK", "✅ OK", "⚠️ Warn", "✅ OK"]})
+
+def calculate_insights(df):
+    # Calculate total time and energy consumption
+    total_time = df['time_taken'].sum()
+    total_energy = df['energy consumption'].sum()
+
+    # Group by activity and sum time_taken
+    activity_sums = df.groupby('activity')['time_taken'].sum()
+
+    total_service = activity_sums.get('service trip', 0)
+    total_material = activity_sums.get('material trip', 0)
+    total_idle = activity_sums.get('idle', 0)
+
+    pd_f = total_service / total_time if total_time != 0 else 0
+    unp_f = (total_idle + total_material) / total_time if total_time != 0 else 0
+
+    data = {
+        'Metric': ['Productive Time Fraction', 'Unproductive Time Fraction', 'Energy Use'],
+        'Value': [pd_f, unp_f, total_energy],
+        'Status': ['?', '?', '?']
+    }
+    insights_df = pd.DataFrame(data=data)
+
     st.dataframe(insights_df, use_container_width=True)
+    return insights_df
 
 def load_excel_with_fallback(label, key):
     uploaded_file = st.file_uploader(f"{label} (.xlsx)", type=["xlsx"], key=key)

@@ -1,6 +1,6 @@
 import streamlit as st
 from check_inaccuracies import check_for_inaccuracies, rename_time_object
-from visualization_functions import make_gantt, display_df, display_insights, load_excel_with_fallback
+from visualization_functions import make_gantt, display_df, calculate_insights, load_excel_with_fallback
 from numpy import dtype
 
 st.set_page_config(page_title="Bus Planning App Dashboard", page_icon="📥", layout="wide")
@@ -22,9 +22,9 @@ with (right):
         st.info("Upload all Bus Planning to view Gantt chart.")
     else:
         try:
-            gantt_df = rename_time_object(planning_df)
-            st.success(f"Loaded {len(gantt_df)} trips for {gantt_df['bus'].nunique()} bus(es).")
-            fig = make_gantt(gantt_df)
+            gantt_df_one = rename_time_object(planning_df)
+            st.success(f"Loaded {len(gantt_df_one)} trips for {gantt_df_one['bus'].nunique()} bus(es).")
+            fig = make_gantt(gantt_df_one)
             st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.error(f"Could not build Gantt chart: {e}")
@@ -50,7 +50,7 @@ with (right):
     if planning_df is None or timetable_df is None or distancematrix_df is None:
         st.info("Upload all files to view Insights.")
     else:
-        display_insights()
+        calculate_insights(gantt_df)
 
     st.subheader("View Files")
 

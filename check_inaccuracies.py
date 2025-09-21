@@ -17,7 +17,10 @@ def validate_dataframe_structure(df, expected_columns, expected_dtypes):
 def check_locations(df, timetable, distancematrix, discard):
     """Pure check: Verify location consistency across dataframes."""
     df_locations = set(df['start location']).union(set(df['end location']))
-    timetable_locations = set(timetable['start']).union(set(timetable['end']))
+    try:
+        timetable_locations = set(timetable['start']).union(set(timetable['end']))
+    except:
+        timetable_locations = set(timetable['start location']).union(set(timetable['end']))
     distancematrix_locations = set(distancematrix['start']).union(set(distancematrix['end']))
 
     df_locations.discard(discard)
@@ -174,5 +177,4 @@ def check_for_inaccuracies(df, expected_columns, expected_dtypes, timetable, dis
     df, energy_errors = check_energy_consumption(df, distancematrix, 5, 7.5, 0.9, 1.1, 0.7, 2.5, 0.9, 1.1 )
     for err in energy_errors:
         print(f"ENERGY ERROR: {err}")
-
     return df
