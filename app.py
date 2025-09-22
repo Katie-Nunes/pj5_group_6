@@ -3,7 +3,7 @@ from check_inaccuracies import check_for_inaccuracies, rename_time_object
 import app_visualization_functions as avm
 from numpy import dtype
 
-st.set_page_config(page_title="Bus Planning App Dashboard", page_icon="📥", layout="wide")
+st.set_page_config(page_title="Bus Planning App Dashboard", page_icon="🍆", layout="wide")
 st.title("Bus Planning App Dashboard")
 st.markdown("Upload your timetable and planning files on the left; review insights and the interactive Gantt chart on the right.")
 left, middle, right = st.columns([3, 10, 2])
@@ -26,8 +26,6 @@ with right:
 
 with middle:
     st.header("Production")
-
-    # Create tabs
     tab_visualize, tab_inspect, tab_insight = st.tabs(["Visualize", "Inspect", "Insight"])
 
     # =================================================================
@@ -40,7 +38,7 @@ with middle:
         else:
             try:
                 gantt_df_one = rename_time_object(planning_df, 'start time', 'end time')
-                st.success(f"Loaded {len(gantt_df_one)} trips for {gantt_df_one['bus'].nunique()} bus(es).")
+                st.toast(f"Loaded {len(gantt_df_one)} trips for {gantt_df_one['bus'].nunique()} bus(es).")
                 fig = avm.make_gantt(gantt_df_one)
                 st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
@@ -52,7 +50,7 @@ with middle:
         else:
             try:
                 gantt_df = check_for_inaccuracies(planning_df, timetable_df,distancematrix_df)
-                st.success(f"Loaded {len(gantt_df)} trips for {gantt_df['bus'].nunique()} bus(es).")
+                st.toast(f"Loaded {len(gantt_df)} trips for {gantt_df['bus'].nunique()} bus(es).")
                 st.plotly_chart(avm.make_gantt(gantt_df), use_container_width=True)
             except Exception as e:
                 st.error(f"Could not build Gantt chart: {e}")
@@ -93,3 +91,4 @@ with left:
         st.info("Upload all files to be able to export to excel.")
     else:
         avm.export_to_excel(gantt_df)
+    avm.donate_button()

@@ -10,9 +10,9 @@
 ## Running
 To run type the below into terminal or command prompt with "PATH_TO_FOLDER" being where you copied this repo to
 ```
-streamlit run /PATH_TO_FOLDER/app.py
+streamlit run /PATH_TO_FOLDER/main.py
 ```
 E.g. 
 ```
-streamlit run ~/PycharmProjects/pj5_group_6/app.py
+streamlit run ~/PycharmProjects/pj5_group_6/main.py
 ```

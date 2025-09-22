@@ -126,3 +126,17 @@ def display_df(excel, label="Files"):
             st.dataframe(excel.head(5), use_container_width=True)
     except Exception as e:
         st.error(f"Could not read file: {e}")
+
+@st.dialog("💸 Donate")
+def donate_popup():
+    st.markdown("### Buy me a Coffee?")
+    st.markdown(""" 
+        - Bank Transfer: https://betaalverzoek.rabobank.nl/betaalverzoek/?id=0g-XTRZfTcmkVAh08KRo3Q
+        - Crypto: https://trocador.app/anonpay?ticker_to=xmr&network_to=Mainnet&address=82jERfWaYWMLaZRjgwvZ5TgJCVoSfRSFRNp9oyPhAsso1nMjqvyZ1sxgguy4NLnmCiV8C4S4tFegYZCGKn6CChbYUUJE5bm&ref=sqKNYGZbRl&direct=True 
+        """)
+    if st.button("Close"):
+        st.rerun()
+
+def donate_button():
+    if st.button("💸 Donate", type="primary"):
+        donate_popup()
