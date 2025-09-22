@@ -1,7 +1,7 @@
 import pandas as pd
 from check_inaccuracies import rename_time_object
 
-def energy_state(df, full_new_battery, state_of_health_frac):
+def energy_state(df, full_new_battery=300, state_of_health_frac=0.85):
     initial_charge = full_new_battery * state_of_health_frac
 
     df['cumulative_energy_used'] = df.groupby('bus')['energy consumption'].cumsum()
@@ -10,7 +10,7 @@ def energy_state(df, full_new_battery, state_of_health_frac):
     df.drop(columns=['cumulative_energy_consumption'], inplace=True, errors='ignore')
     return df, initial_charge
 
-def check_energy_feasibility(df, initial_charge, low, high):
+def check_energy_feasibility(df, initial_charge, low=0.1, high=0.9):
     min_bat_life = initial_charge * low
     max_charging = initial_charge * high
 
@@ -44,16 +44,16 @@ def validate_start_end_locations(df, start_end_location='ehvgar'):
     invalid_buses = pd.merge(invalid_start, invalid_end, on='bus', how='outer', suffixes=('_start', '_end'))
 
     if not invalid_buses.empty:
-        print("Error: The following buses do not start/end at 'ehvgar':")
+        print(f"Error: The following buses do not start/end at {start_end_location}:")
         print(invalid_buses)
     else:
-        print("All buses start and end at 'ehvgar'.")
+        print(f"All buses start and end at {start_end_location}'.")
     return invalid_buses
 
 
-def minimum_charging(df, min_ch_time_seconds):
+def minimum_charging(df, min_charging_minutes=15):
     charging_rows = df[df['activity'] == 'charging']
-    threshold = pd.Timedelta(seconds=min_ch_time_seconds)
+    threshold = pd.Timedelta(seconds=min_charging_minutes*60)
     insufficient_charging = charging_rows[charging_rows['time_taken'] < threshold]
 
     if not insufficient_charging.empty:
@@ -67,12 +67,12 @@ def fulfills_timetable(df, timetable_df):
     is_valid = len(mismatched_starts) == 0
     return is_valid, mismatched_starts
 
-def check_feasibility(df, full_new_battery, state_of_health_frac, timetable_df):
+def check_feasibility(df, timetable_df, full_new_battery=300, state_of_health_frac=0.85, low=0.1, high=0.9, min_charging_minutes=15, start_end_location='ehvgar'):
     df, initial_charge = energy_state(df, full_new_battery, state_of_health_frac)
-    check_energy_feasibility(df, initial_charge, 0.1, 0.9)
-    invalid_buses = validate_start_end_locations(df)
+    check_energy_feasibility(df, initial_charge, low, high)
+    invalid_buses = validate_start_end_locations(df, start_end_location)
     print(invalid_buses)
-    print(minimum_charging(df, 900))
+    print(minimum_charging(df, min_charging_minutes))
     rename_time_object(timetable_df, 'departure_time', None)
     is_valid, mismatched_starts = fulfills_timetable(df, timetable_df)
     return df

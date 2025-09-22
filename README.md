@@ -14,5 +14,5 @@ streamlit run /PATH_TO_FOLDER/app.py
 ```
 E.g. 
 ```
-streamlit run /home/saturn/PycharmProjects/pj5_group_6/app.py
+streamlit run ~/PycharmProjects/pj5_group_6/app.py
 ```

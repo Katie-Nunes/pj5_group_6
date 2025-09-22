@@ -1,7 +1,19 @@
 import pandas as pd
 from datetime import datetime, date, timedelta
-import sys
 import numpy as np
+from numpy import dtype
+import importlib
+import subprocess
+import sys
+
+def ensure_packages(packages):
+    for package in packages:
+        try:
+            importlib.import_module(package)
+        except ImportError:
+            print(f"Package '{package}' not found. Installing...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
 
 def validate_dataframe_structure(df, expected_columns, expected_dtypes):
     """Pure check: Validate column names and dtypes without modifying data."""
@@ -93,8 +105,8 @@ def fill_all_gaps(df: pd.DataFrame, continuity) -> pd.DataFrame:
         df = insert_idle_given_row(df, idx-1)
     return df
 
-def remove_wrong_gaps(df, too_long_for_idle_in_seconds):
-    threshold = pd.Timedelta(seconds=too_long_for_idle_in_seconds)
+def remove_wrong_gaps(df, too_long_for_idle_in_minutes=120):
+    threshold = pd.Timedelta(seconds=too_long_for_idle_in_minutes*60)
     df = df[df['time_taken'] < threshold]
     return df
 
@@ -108,7 +120,7 @@ def calc_timedelta(df):
     df["time_taken"] = df["end time"] - df["start time"]
     return df
 
-def check_energy_consumption(df, distancematrix, idle_cost_ph, charge_speed: float, low_charge_rate: float, high_charge_rate: float, low_energy_use, high_energy_use, low_idle_cost, high_idle_cost):
+def check_energy_consumption(df, distancematrix, idle_cost_ph, charge_speed_assumed: float, low_charge_rate: float, high_charge_rate: float, low_energy_use, high_energy_use, low_idle_cost, high_idle_cost):
     """Check: Validate energy consumption rules without modifying data."""
     errors = []
     distance_lookup = (distancematrix.set_index(['start', 'end'])['distance_m'].to_dict())
@@ -127,10 +139,10 @@ def check_energy_consumption(df, distancematrix, idle_cost_ph, charge_speed: flo
             minutes = row['time_taken'].total_seconds() / 60.0
 
             if activity == 'charging':
-                low = -charge_speed * minutes * low_charge_rate
-                high = -charge_speed * minutes * high_charge_rate
+                low = -charge_speed_assumed * minutes * low_charge_rate
+                high = -charge_speed_assumed * minutes * high_charge_rate
                 if not validate_range(idx, energy, high, low, "Charging"):
-                    df.loc[idx, 'energy consumption'] = -7.5 * minutes
+                    df.loc[idx, 'energy consumption'] = -charge_speed_assumed * minutes
 
             elif activity in ('material trip', 'service trip'):
                 trip_key = (row['start location'], row['end location'])
@@ -144,7 +156,7 @@ def check_energy_consumption(df, distancematrix, idle_cost_ph, charge_speed: flo
                 base = (idle_cost_ph / 60) * minutes
                 low, high = base * low_idle_cost, base * high_idle_cost
                 if not validate_range(idx, energy, low, high, "Idle"):
-                    df.loc[idx, 'energy consumption'] = (5/60) * minutes
+                    df.loc[idx, 'energy consumption'] = (idle_cost_ph/60) * minutes
 
             else:
                 errors.append(f"Row {idx}: Unrecognized activity '{activity}'")
@@ -155,7 +167,7 @@ def check_energy_consumption(df, distancematrix, idle_cost_ph, charge_speed: flo
     return df, errors
 
 
-def check_for_inaccuracies(df, expected_columns, expected_dtypes, timetable, distancematrix, ref_date=None):
+def check_for_inaccuracies(df, timetable, distancematrix, expected_columns=['start location', 'end location', 'start time', 'end time', 'activity', 'line', 'energy consumption', 'bus'], expected_dtypes={'start location': dtype('O'), 'end location': dtype('O'), 'start time': dtype('O'), 'end time': dtype('O'), 'activity': dtype('O'), 'line': dtype('float64'), 'energy consumption': dtype('float64'), 'bus': dtype('int64')}, too_long_for_idle_in_minutes=120, idle_cost_ph=5, charge_speed_assumed=7.5, low_charge_rate=0.9, high_charge_rate=1.1, low_energy_use=0.7, high_energy_use=2.5, low_idle_cost=0.9, high_idle_cost=1.1, discard='ehvgar', ref_date=None):
     """Centralized error handling and workflow orchestration."""
     try:
         pass
@@ -163,7 +175,7 @@ def check_for_inaccuracies(df, expected_columns, expected_dtypes, timetable, dis
     except Exception as e:
         print(f"CRITICAL STRUCTURE ERROR: {e}", file=sys.stderr)
 
-    location_errors = check_locations(df, timetable, distancematrix, 'ehvgar')
+    location_errors = check_locations(df, timetable, distancematrix, discard)
     for err in location_errors:
         print(f"LOCATION ERROR: {err}")
 
@@ -178,10 +190,10 @@ def check_for_inaccuracies(df, expected_columns, expected_dtypes, timetable, dis
 
     df = fill_all_gaps(df, cunty)
     df = calc_timedelta(df)
-    df = remove_wrong_gaps(df, 7200)
+    df = remove_wrong_gaps(df, too_long_for_idle_in_minutes)
     df = rename_lines(df)
 
-    df, energy_errors = check_energy_consumption(df, distancematrix, 5, 7.5, 0.9, 1.1, 0.7, 2.5, 0.9, 1.1 )
+    df, energy_errors = check_energy_consumption(df, distancematrix, idle_cost_ph, charge_speed_assumed, low_charge_rate, high_charge_rate, low_energy_use, high_energy_use, low_idle_cost, high_idle_cost)
     for err in energy_errors:
         print(f"ENERGY ERROR: {err}")
     return df
