@@ -2,7 +2,9 @@ import streamlit as st
 import plotly.express as px
 import pandas as pd
 from io import BytesIO
+from error_handling import streamlit_error_handler
 
+@streamlit_error_handler
 def make_gantt(gantt_df):
     fig = px.timeline(gantt_df, x_start="start time", x_end="end time", y="bus", color="activity",
                       hover_data=["start location", "end location", "line", "energy consumption"],
@@ -12,6 +14,7 @@ def make_gantt(gantt_df):
                      font_size=13, title_font_size=22)
     return fig
 
+@streamlit_error_handler
 def get_total_distance_km(df, distance_lookup):
     total_distance = 0.0
     for idx, row in df.iterrows():
@@ -32,6 +35,7 @@ def get_total_distance_km(df, distance_lookup):
         total_distance += distance_m
     return total_distance / 1000.0  # returns distance in kilometers
 
+@streamlit_error_handler
 def calculate_insights(df, distance_lookup):
     # Calculate total time and energy consumption
     total_time = df['time_taken'].sum()
@@ -78,13 +82,14 @@ def calculate_insights(df, distance_lookup):
 
     return insights_df
 
+@streamlit_error_handler
 def load_excel_with_fallback(label, key):
     uploaded_file = st.file_uploader(f"{label} (.xlsx)", type=["xlsx"], key=key)
     if uploaded_file:
         return pd.read_excel(uploaded_file)
     return None
 
-
+@streamlit_error_handler
 def export_to_excel(df, filename="gantt_export.xlsx"):
     """Convert DataFrame to Excel bytes for download"""
     output = BytesIO()
@@ -104,6 +109,7 @@ def export_to_excel(df, filename="gantt_export.xlsx"):
     )
     return
 
+@streamlit_error_handler
 def display_feasibility_vars():
     full_new_battery = st.number_input("Full New Battery (kWh)", min_value=0, max_value=1000, value=300, step=10)
     state_of_health_frac = st.slider("State of Health Fraction", min_value=0.0, max_value=1.0, value=0.85, step=0.01)
@@ -120,12 +126,11 @@ def display_inaccuracy_vars():
     low_idle_cost, high_idle_cost = st.slider("Idle Cost Margin of Error (kWh)", min_value=0.0, max_value=2.0, value=(0.9, 1.1),step=0.01)
     discard = st.text_input("Discard in Location Check", value='ehvgar')
 
+
+@streamlit_error_handler
 def display_df(excel, label="Files"):
-    try:
-        with st.expander(f"Preview {label} (first 5 rows)"):
-            st.dataframe(excel.head(5), use_container_width=True)
-    except Exception as e:
-        st.error(f"Could not read file: {e}")
+    with st.expander(f"Preview {label} (first 5 rows)"):
+        st.dataframe(excel.head(5), use_container_width=True)
 
 @st.dialog("💸 Donate")
 def donate_popup():
@@ -134,8 +139,7 @@ def donate_popup():
         - Bank Transfer: https://betaalverzoek.rabobank.nl/betaalverzoek/?id=0g-XTRZfTcmkVAh08KRo3Q
         - Crypto: https://trocador.app/anonpay?ticker_to=xmr&network_to=Mainnet&address=82jERfWaYWMLaZRjgwvZ5TgJCVoSfRSFRNp9oyPhAsso1nMjqvyZ1sxgguy4NLnmCiV8C4S4tFegYZCGKn6CChbYUUJE5bm&ref=sqKNYGZbRl&direct=True 
         """)
-    if st.button("Close"):
-        st.rerun()
+    st.markdown("---")
 
 def donate_button():
     if st.button("💸 Donate", type="primary"):
