@@ -14,7 +14,6 @@ def ensure_packages(packages):
             print(f"Package '{package}' not found. Installing...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", package])
 
-
 def validate_dataframe_structure(df, expected_columns, expected_dtypes):
     """Pure check: Validate column names and dtypes without modifying data."""
     actual_columns = df.columns.tolist()

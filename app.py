@@ -51,15 +51,7 @@ with middle:
             st.info("Upload all files to view Improved Gantt chart.")
         else:
             try:
-                expected_columns = ['start location', 'end location', 'start time', 'end time', 'activity', 'line',
-                                    'energy consumption', 'bus']
-                expected_dtypes = {'start location': dtype('O'), 'end location': dtype('O'),
-                                   'start time': dtype('datetime64[ns]'),
-                                   'end time': dtype('datetime64[ns]'), 'activity': dtype('O'),
-                                   'line': dtype('float64'),
-                                   'energy consumption': dtype('float64'), 'bus': dtype('int64')}
-                gantt_df = check_for_inaccuracies(planning_df, expected_columns, expected_dtypes, timetable_df,
-                                                  distancematrix_df)
+                gantt_df = check_for_inaccuracies(planning_df, timetable_df,distancematrix_df)
                 st.success(f"Loaded {len(gantt_df)} trips for {gantt_df['bus'].nunique()} bus(es).")
                 st.plotly_chart(avm.make_gantt(gantt_df), use_container_width=True)
             except Exception as e:
