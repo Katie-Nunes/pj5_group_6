@@ -1,2 +1,18 @@
-# pj5 group 6
+# Bus Planning App
+## Requirements
+- Python (>Python 3.12.2)
+- pandas
+- numpy
+- datetime
+- sys
+- streamlit
 
+## Running
+To run type the below into terminal or command prompt with "PATH_TO_FOLDER" being where you copied this repo to
+```
+streamlit run /PATH_TO_FOLDER/app.py
+```
+E.g. 
+```
+streamlit run /home/saturn/PycharmProjects/pj5_group_6/app.py
+```
