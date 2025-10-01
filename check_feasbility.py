@@ -1,96 +1,64 @@
+# feasibility_checks.py
 import pandas as pd
+from logging_utils import report_error, report_warning, report_info
 from check_inaccuracies import rename_time_object
 
 def energy_state(df, full_new_battery=300, state_of_health_frac=0.85):
-    initial_charge = full_new_battery * state_of_health_frac
-
-    df['cumulative_energy_used'] = df.groupby('bus')['energy consumption'].cumsum()
-    df['current_charge'] = initial_charge - df['cumulative_energy_used']
-
-    df.drop(columns=['cumulative_energy_consumption'], inplace=True, errors='ignore')
-    return df, initial_charge
+    try:
+        initial_charge = full_new_battery * state_of_health_frac
+        df = df.copy()
+        df['cumulative_energy_used'] = df.groupby('bus')['energy consumption'].cumsum()
+        df['current_charge'] = initial_charge - df['cumulative_energy_used']
+        return df, initial_charge
+    except Exception as e:
+        report_error("Error computing energy state", e)
+        return df, 0
 
 def check_energy_feasibility(df, initial_charge, low=0.1, high=0.9):
-    min_bat_life = initial_charge * low
-    max_charging = initial_charge * high
+    min_bat = initial_charge * low
+    max_bat = initial_charge * high
+    under = df[df['current_charge'] < min_bat]
+    over = df[df['current_charge'] > max_bat]
 
-    charging_rows = df.loc[df['energy consumption'] < 0]
-    under_min = df.loc[df['current_charge'] < min_bat_life]
-    over_max = charging_rows.loc[charging_rows['energy consumption'] > -max_charging]  # Adjusted condition
-
-    if not under_min.empty:
-        print(f"Error: Some trips fall below minimum battery threshold ({min_bat_life:.2f} kWh):")
-        print(f"{under_min[['bus', 'start time', 'current_charge']]}")
+    if not under.empty:
+        report_error("Some buses dip below minimum charge!")
+        return False
+    if not over.empty:
+        report_error("Some buses exceed maximum charge threshold")
         return False
 
-    print("All trips are charge feasible.")
-    if not over_max.empty:
-        print(f"Error: Some buses exceed max charging limit ({max_charging:.2f} kWh):")
-        print(over_max[['bus', 'start time', 'cumulative_energy_gained']])
-        return False
-
-    print("All trips are energy-feasible.")
+    report_info("✅ All trips are charge feasible", user=True)
     return True
 
-def validate_start_end_locations(df, start_end_location='ehvgar'):
-    start_locations = df.groupby('bus', as_index=False).first()['start location']
-    end_locations = df.groupby('bus', as_index=False).last()['end location']
-
-    bus_start_end = pd.DataFrame({'bus': df.groupby('bus', as_index=False).first()['bus'], 'start_location': start_locations, 'end_location': end_locations})
-
-    invalid_start = bus_start_end[bus_start_end['start_location'] != start_end_location]
-    invalid_end = bus_start_end[bus_start_end['end_location'] != start_end_location]
-
-    invalid_buses = pd.merge(invalid_start, invalid_end, on='bus', how='outer', suffixes=('_start', '_end'))
-
-    if not invalid_buses.empty:
-        print(f"Error: The following buses do not start/end at {start_end_location}:")
-        print(invalid_buses)
-    else:
-        print(f"All buses start and end at {start_end_location}'.")
-    return invalid_buses
-
+def validate_start_end_locations(df, start_end_location="ehvgar"):
+    grouped = df.groupby('bus', as_index=False)
+    invalid = pd.DataFrame({
+        'bus': grouped.first()['bus'],
+        'start': grouped.first()['start location'],
+        'end': grouped.last()['end location']
+    })
+    not_ok = invalid[
+        (invalid['start'] != start_end_location) |
+        (invalid['end'] != start_end_location)
+    ]
+    if not not_ok.empty:
+        report_warning("Some buses do not start/end at depot")
+    return not_ok
 
 def minimum_charging(df, min_charging_minutes=15):
-    charging_rows = df[df['activity'] == 'charging']
-    threshold = pd.Timedelta(seconds=min_charging_minutes*60)
-    insufficient_charging = charging_rows[charging_rows['time_taken'] < threshold]
-
-    if not insufficient_charging.empty:
-        return "Ya got charging less than allowed time, change minimum charging time in file or value checked against here"
-    return "All gud on min chargin bruv"
+    charging = df[df['activity'] == 'charging']
+    threshold = pd.Timedelta(minutes=min_charging_minutes)
+    bad = charging[charging['time_taken'] < threshold]
+    if not bad.empty:
+        report_warning("Some charging blocks are shorter than minimum allowed")
+    return bad
 
 def fulfills_timetable(df, timetable_df):
     df_starts = set(df['start time'])
     timetable_starts = set(timetable_df['departure_time'])
-    mismatched_starts = timetable_starts - df_starts
-    is_valid = len(mismatched_starts) == 0
-    return is_valid, mismatched_starts
-
-def check_feasibility(df, timetable_df, full_new_battery=300, state_of_health_frac=0.85, low=0.1, high=0.9, min_charging_minutes=15, start_end_location='ehvgar'):
-    df, initial_charge = energy_state(df, full_new_battery, state_of_health_frac)
-    check_energy_feasibility(df, initial_charge, low, high)
-    invalid_buses = validate_start_end_locations(df, start_end_location)
-    print(invalid_buses)
-    print(minimum_charging(df, min_charging_minutes))
-    rename_time_object(timetable_df, 'departure_time', None)
-    is_valid, mismatched_starts = fulfills_timetable(df, timetable_df)
-    return df
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    mismatch = timetable_starts - df_starts
+    if mismatch:
+        report_error(f"Missing timetable start times: {len(mismatch)} unmatched")
+        return False, mismatch
+    report_info("✅ Timetable matches covered")
+    return True, set()

@@ -1,29 +1,52 @@
 import streamlit as st
+import logging
 from check_inaccuracies import check_for_inaccuracies, rename_time_object
 import app_visualization_functions as avm
-from numpy import dtype
+from logging_utils import report_error, report_warning, report_info
 
+# --------------------------------------------------------
+# Setup
+# --------------------------------------------------------
 st.set_page_config(page_title="Bus Planning App Dashboard", page_icon="🍆", layout="wide")
 st.title("Bus Planning App Dashboard")
-st.markdown("Upload your timetable and planning files on the left; review insights and the interactive Gantt chart on the right.")
+st.markdown(
+    "📂 Upload your **timetable**, **planning files**, and **distance matrix** on the left. "
+    "➡️ See insights, diagnostics, and interactive Gantt visualization on the right."
+)
+
+# Init logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
 left, middle, right = st.columns([3, 10, 2])
 
+# --------------------------------------------------------
+# Sidebar / Left Pane: File Upload
+# --------------------------------------------------------
 with left:
     st.header("File Uploaders")
     planning_df = avm.load_excel_with_fallback("Bus Planning file", "u_planning")
     timetable_df = avm.load_excel_with_fallback("Timetable file", "u_timetable")
     distancematrix_df = avm.load_excel_with_fallback("Distance Matrix", "u_distancematrix")
 
+# --------------------------------------------------------
+# Right Pane: Configuration
+# --------------------------------------------------------
 with right:
     st.header("Variables")
     tab_inn, tab_feas = st.tabs(["Inaccuracy", "Feasibility"])
+
     with tab_inn:
         st.subheader("Inaccuracy")
         avm.display_inaccuracy_vars()
+
     with tab_feas:
         st.subheader("Feasibility")
         avm.display_feasibility_vars()
 
+# --------------------------------------------------------
+# Middle Pane: Production Tabs
+# --------------------------------------------------------
 with middle:
     st.header("Production")
     tab_visualize, tab_inspect, tab_insight = st.tabs(["Visualize", "Inspect", "Insight"])
@@ -31,64 +54,107 @@ with middle:
     # =================================================================
     # Tab 1: Visualize
     # =================================================================
+    gantt_df = None  # ensure scope safety
     with tab_visualize:
         st.subheader("Gantt Chart")
+
+        # Basic Gantt
         if planning_df is None:
-            st.info("Upload Bus Planning file to view Gantt chart.")
+            st.info("⬆️ Upload **Bus Planning file** to view basic Gantt chart.")
         else:
             try:
                 gantt_df_one = rename_time_object(planning_df, 'start time', 'end time')
-                st.toast(f"Loaded {len(gantt_df_one)} trips for {gantt_df_one['bus'].nunique()} bus(es).")
+                st.toast(
+                    f"Loaded {len(gantt_df_one)} trips across "
+                    f"{gantt_df_one['bus'].nunique()} bus(es)."
+                )
                 fig = avm.make_gantt(gantt_df_one)
                 st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
-                st.error(f"Could not build Gantt chart: {e}")
+                st.error(f"😬 Could not build Gantt chart.\nDetails: {e}")
+                logger.exception("Error building basic Gantt")
 
+        # Improved, validated Gantt
         st.subheader("Improved Gantt Chart")
-        if planning_df is None or timetable_df is None or distancematrix_df is None:
-            st.info("Upload all files to view Improved Gantt chart.")
+        if not all([planning_df is not None, timetable_df is not None, distancematrix_df is not None]):
+            st.info("⬆️ Upload **all three files** to view the improved Gantt chart.")
         else:
             try:
-                gantt_df = check_for_inaccuracies(planning_df, timetable_df,distancematrix_df)
-                st.toast(f"Loaded {len(gantt_df)} trips for {gantt_df['bus'].nunique()} bus(es).")
+                gantt_df = check_for_inaccuracies(planning_df, timetable_df, distancematrix_df)
+                st.toast(
+                    f"✅ Corrected {len(gantt_df)} trips."
+                    f" Covering {gantt_df['bus'].nunique()} bus(es)."
+                )
                 st.plotly_chart(avm.make_gantt(gantt_df), use_container_width=True)
             except Exception as e:
-                st.error(f"Could not build Gantt chart: {e}")
+                st.error(f"🚨 Could not build improved Gantt chart.\nDetails: {e}")
+                logger.exception("Error building improved Gantt")
 
     # =================================================================
     # Tab 2: Inspect
     # =================================================================
     with tab_inspect:
         st.subheader("View Files")
-        if planning_df is None:
-            st.info("Upload Bus Planning file to view.")
-        else:
-            avm.display_df(planning_df, "Bus Planning")
 
-        if timetable_df is None:
-            st.info("Upload Timetable file to view.")
-        else:
-            avm.display_df(timetable_df, "Timetable")
+        files = [
+            ("Bus Planning", planning_df),
+            ("Timetable", timetable_df),
+            ("Distance Matrix", distancematrix_df)
+        ]
+        for name, df in files:
+            if df is None:
+                st.info(f"⬆️ Upload {name} file to view.")
+            else:
+                avm.display_df(df, name)
 
-        if distancematrix_df is None:
-            st.info("Upload Distance Matrix file to view.")
-        else:
-            avm.display_df(distancematrix_df, "Distance Matrix")
 
     # =================================================================
     # Tab 3: Insight
     # =================================================================
-    with tab_insight:
+with tab_insight:
+    try:
         st.subheader("Insights")
-        if planning_df is None or timetable_df is None or distancematrix_df is None:
-            st.info("Upload all files to view Insights.")
+        if gantt_df is None or timetable_df is None or distancematrix_df is None:
+            st.info("⬆️ Upload all files for insights/feasibility checks.")
         else:
-            avm.calculate_insights(gantt_df, distancematrix_df)
+            try:
+                insights_df, feasibility_df = avm.calculate_insights(
+                    gantt_df,
+                    distancematrix_df,
+                    timetable_df
+                )
+            except Exception as e:
+                report_error(f"Could not calculate insights: {e}", exception=e)
 
+            with st.expander("📥 Export Insights"):
+                st.download_button(
+                    label="Download Insights (CSV)",
+                    data=insights_df.to_csv(index=False).encode("utf-8"),
+                    file_name="insights.csv",
+                    mime="text/csv"
+                )
+                st.download_button(
+                    label="Download Feasibility Checks (CSV)",
+                    data=feasibility_df.to_csv(index=False).encode("utf-8"),
+                    file_name="feasibility_checks.csv",
+                    mime="text/csv"
+                )
+    except Exception as e:
+            st.error(f"📊 Could not calculate insights.\nDetails: {e}")
+            import logging
+            logging.exception("Error calculating insights")
+
+# --------------------------------------------------------
+# Bottom Export
+# --------------------------------------------------------
 with left:
     st.subheader("Export Bus Planning")
-    if planning_df is None or timetable_df is None or distancematrix_df is None:
-        st.info("Upload all files to be able to export to excel.")
+    if gantt_df is None or distancematrix_df is None:
+        st.info("⬆️ Upload all files to enable export.")
     else:
-        avm.export_to_excel(gantt_df)
+        try:
+            avm.export_to_excel(gantt_df)
+        except Exception as e:
+            st.error(f"💾 Could not export to Excel.\nDetails: {e}")
+            logger.exception("Error exporting")
     avm.donate_button()
