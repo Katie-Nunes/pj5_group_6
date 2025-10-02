@@ -49,9 +49,22 @@ def validate_dataframe_structure(
         'bus': np.integer
     }
 
-    if apply is True:
-        df = df.astype(expected_dtypes)
+    if apply:
+        # Convert dtypes safely
+        for col, dtype in expected_dtypes.items():
+            if col in df.columns:
+                try:
+                    if dtype == 'Int64':
+                        # Use nullable integer type for 'bus' column
+                        df[col] = pd.to_numeric(df[col], errors='coerce').astype('float64')
+                    elif dtype in ['float64', np.floating]:
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
+                    else:
+                        df[col] = df[col].astype(dtype)
+                except Exception as e:
+                    print(f"Warning: Could not convert column '{col}' to {dtype}: {e}")
         return df
+
     ok = True
     expected_cols = list(expected_dtypes.keys())
     actual_cols = df.columns.tolist()
@@ -82,8 +95,8 @@ def check_locations(
     """Check location consistency across input dataframes."""
     df_locations = set(df['start location']).union(df['end location'])
     timetable_locations = set(
-        timetable.get('start', timetable['start location'])
-    ).union(timetable.get('end', timetable['end location']))
+        timetable.get('start', timetable['start'])
+    ).union(timetable.get('end', timetable['end']))
     distancematrix_locations = set(distancematrix['start']).union(distancematrix['end'])
 
     for locations in (df_locations, distancematrix_locations):
@@ -100,7 +113,7 @@ def check_locations(
 def _coerce(series: pd.Series, ref_date: date) -> pd.Series:
     """Convert time strings into datetime on a reference date."""
     s = series.astype(str)
-    for fmt in ("%H:%M:%S", "%H:%M"):
+    for fmt in ("%H:%M:%S", "%H:%M", "%Y-%m-%d %H:%M:%S"):
         try:
             t = pd.to_datetime(s, format=fmt).dt.time
             break

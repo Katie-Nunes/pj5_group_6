@@ -2,11 +2,27 @@ import pandas as pd
 import datetime
 from check_inaccuracies import rename_time_object, validate_dataframe_structure
 
+
 def lookup_distance_matrix(start, end, line, distance_matrix_df):
-    row = distance_matrix_df[
-        (distance_matrix_df['start'] == start) & (distance_matrix_df['end'] == end) & (distance_matrix_df['line'] == line)
-    ]
-    return row.iloc[0]['max_travel_time'], row.iloc[0]['distance_m'], 0
+    if start == 'ehvgar' or end == 'ehvgar':
+        # For garage routes, don't filter by line
+        row = distance_matrix_df[
+            (distance_matrix_df['start'] == start) &
+            (distance_matrix_df['end'] == end)
+            ]
+    else:
+        # For regular routes, filter by line as well
+        row = distance_matrix_df[
+            (distance_matrix_df['start'] == start) &
+            (distance_matrix_df['end'] == end) &
+            (distance_matrix_df['line'] == line)
+            ]
+
+    max_travel_time = int(row.iloc[0]['max_travel_time'])
+    distance_m = int(row.iloc[0]['distance_m'])
+
+
+    return max_travel_time, distance_m, 0
 
 def get_bus_from_garage(location, line, departure_time, distance_matrix_df, next_bus_id):
     travel_time, distance_m, _ = lookup_distance_matrix('ehvgar', location, line, distance_matrix_df)
@@ -150,7 +166,7 @@ def create_planning(TIMETABLE, DISTANCEMATRIX):
     next_bus_id = 1
     next_bus_id = main_timetable_iteration(TIMETABLE, DISTANCEMATRIX, bus_locations, generated_data, next_bus_id)
     output_df = create_dataframe(generated_data)
-    print(output_df)
+    return output_df
 
 if "__name__" == "__main__":
     create_planning()
