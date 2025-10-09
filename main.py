@@ -3,7 +3,7 @@ ensure_packages(['pandas', 'numpy', 'streamlit', 'plotly', 'xlsxwriter', 'dateti
 
 import pandas as pd
 from check_inaccuracies import check_for_inaccuracies, ensure_packages
-from check_feasbility import check_energy_feasibility
+from check_feasbility import check_all_feasibility, fulfills_timetable
 from create_planning import create_planning
 import streamlit as st
 import logging
@@ -23,10 +23,12 @@ def main (planning_df, timetable_df, distancematrix_df, debug=True):
             st.error("❗ An unexpected error occurred.")
             st.exception(exc)
     else:
-        df = create_planning(timetable_df, distancematrix_df)
-        df = check_for_inaccuracies(df, timetable_df, distancematrix_df)
-        df.to_excel("Excel Files/TESTCASE.xlsx", index=False)
-        #check_energy_feasibility(df, TIMETABLE)
+        #df = create_planning(timetable_df, distancematrix_df)
+        #df = check_for_inaccuracies(planning_df, timetable_df, distancematrix_df)
+        #tt, missing_trips = check_all_feasibility(df, timetable_df)
+        #print(missing_trips)
+        df = create_planning(TIMETABLE, DISTANCEMATRIX)
+    return df
 
 if __name__ == "__main__":
-    main(PLANNING, TIMETABLE, DISTANCEMATRIX)
+    df = main(PLANNING, TIMETABLE, DISTANCEMATRIX)

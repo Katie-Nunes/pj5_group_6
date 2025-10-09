@@ -1,5 +1,7 @@
 # feasibility_checks.py
 import pandas as pd
+import streamlit as st
+
 from logging_utils import report_error, report_warning, report_info
 from check_inaccuracies import rename_time_object
 
@@ -21,13 +23,14 @@ def check_energy_feasibility(df, initial_charge, low=0.1, high=0.9):
     over = df[df['current_charge'] > max_bat]
 
     if not under.empty:
-        report_error("Some buses dip below minimum charge!")
+        report_error(f"Some buses dip below minimum charge!{st.expander}")
+        # SHOW WHICH BUSES
         return False
     if not over.empty:
-        report_error("Some buses exceed maximum charge threshold")
+        report_error(f"Some buses exceed maximum charge threshold")
         return False
 
-    report_info("✅ All trips are charge feasible", user=True)
+    report_info("ᕙ(  •̀ ᗜ •́  )ᕗ All trips are charge feasible", user=True)
     return True
 
 def validate_start_end_locations(df, start_end_location="ehvgar"):
@@ -57,8 +60,54 @@ def fulfills_timetable(df, timetable_df):
     df_starts = set(df['start time'])
     timetable_starts = set(timetable_df['departure_time'])
     mismatch = timetable_starts - df_starts
+    #FIX THIS TO CHECK PER LINE
     if mismatch:
         report_error(f"Missing timetable start times: {len(mismatch)} unmatched")
         return False, mismatch
-    report_info("✅ Timetable matches covered")
+    report_info("ᕙ(  •̀ ᗜ •́  )ᕗ Timetable matches covered")
     return True, set()
+
+
+def fulfills_timetable(df, timetable_df):
+    service_trips = df[df['activity'] == 'service trip']
+
+    service_trip_set = set(zip(
+        service_trips['start location'],
+        service_trips['end location'],
+        service_trips['start time'],
+        service_trips['line']
+    ))
+
+    timetable_set = set(zip(
+        timetable_df['start'],
+        timetable_df['end'],
+        timetable_df['departure_time'],
+        timetable_df['line']
+    ))
+
+    missing_trips = timetable_set - service_trip_set
+
+    if missing_trips:
+        report_error(f"Missing {len(missing_trips)} timetable trips")
+        return False, missing_trips
+
+    report_info("ᕙ(  •̀ ᗜ •́  )ᕗ Timetable matches covered")
+    return True, set()
+
+def check_all_feasibility(df, timetable_df):
+    timetable_df = rename_time_object(timetable_df, "departure_time", "Not Inside")
+    df_energy, initial_charge = energy_state(df)
+    energy_ok = check_energy_feasibility(df_energy, initial_charge)
+    invalid_buses = validate_start_end_locations(df_energy)
+    bad_charging = minimum_charging(df_energy)
+
+    timetable_ok, missing_trips = fulfills_timetable(df_energy, timetable_df)
+
+    feasible = energy_ok and timetable_ok
+
+    if not invalid_buses.empty:
+        report_warning(f"Found {len(invalid_buses)} buses not starting/ending at depot")
+
+    if not bad_charging.empty:
+        report_warning(f"Found {len(bad_charging)} charging blocks shorter than minimum")
+    return feasible, missing_trips

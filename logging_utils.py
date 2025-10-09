@@ -13,14 +13,14 @@ def report_error(msg: str, exception: Exception = None, user: bool = True, fatal
         logger.error(msg)
 
     if user:
-        st.error(f"❌ {msg}")
+        st.error(f"( ｡ •̀ ᴖ •́ ｡) {msg}")
     if fatal:
         raise exception if exception else RuntimeError(msg)
 
 def report_warning(msg: str, user: bool = True):
     logger.warning(msg)
     if user:
-        st.warning(f"⚠️ {msg}")
+        st.warning(f" (╥ᆺ╥；)  {msg}")
 
 def report_info(msg: str, user: bool = False):
     logger.info(msg)

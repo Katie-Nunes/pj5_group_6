@@ -5,6 +5,7 @@ from check_feasbility import (  # assume you put previous functions in feasibili
     fulfills_timetable,
     energy_state
 )
+from check_inaccuracies import rename_time_object
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -66,14 +67,14 @@ import streamlit as st
 def _colorize_status(df: pd.DataFrame, col: str = "Status") -> str:
     """Convert DataFrame into HTML table with traffic-light background colors."""
     color_map = {
-        "✅ Good": "background-color:#4CAF50; color:white",
-        "✅ Acceptable": "background-color:#4CAF50; color:white",
-        "✅ Efficient": "background-color:#4CAF50; color:white",
-        "✅ Pass": "background-color:#4CAF50; color:white",
-        "⚠️ Low": "background-color:#FFEB3B; color:black",
-        "⚠️ High": "background-color:#FFEB3B; color:black",
-        "⚠️ Out of range": "background-color:#FF9800; color:black",
-        "❌ Fail": "background-color:#F44336; color:white",
+        "ᕙ(  •̀ ᗜ •́  )ᕗ Good": "background-color:#4CAF50; color:white",
+        "ᕙ(  •̀ ᗜ •́  )ᕗ Acceptable": "background-color:#4CAF50; color:white",
+        "ᕙ(  •̀ ᗜ •́  )ᕗ Efficient": "background-color:#4CAF50; color:white",
+        "ᕙ(  •̀ ᗜ •́  )ᕗ Pass": "background-color:#4CAF50; color:white",
+        " (╥ᆺ╥；)  Low": "background-color:#FFEB3B; color:black",
+        " (╥ᆺ╥；)  High": "background-color:#FFEB3B; color:black",
+        " (╥ᆺ╥；)  Out of range": "background-color:#FF9800; color:black",
+        "( ｡ •̀ ᴖ •́ ｡) Fail": "background-color:#F44336; color:white",
     }
 
     styled = df.copy()
@@ -105,6 +106,8 @@ def calculate_insights(df: pd.DataFrame, distance_lookup: pd.DataFrame,
     Calculate and display performance KPIs and feasibility checks with traffic-light coloring.
     """
 
+
+
     # --- Core Metrics ---
     total_time = df["time_taken"].sum()
     total_energy = df["energy consumption"].sum()
@@ -118,9 +121,9 @@ def calculate_insights(df: pd.DataFrame, distance_lookup: pd.DataFrame,
     energy_per_km = total_distance and (total_energy / total_distance)
 
     # Assign KPI traffic lights
-    status_prod = "✅ Good" if productive_fraction > 0.5 else ("⚠️ Low" if productive_fraction > 0.35 else "❌ Fail")
-    status_unp = "✅ Acceptable" if unproductive_fraction < 0.5 else ("⚠️ High" if unproductive_fraction < 0.65 else "❌ Fail")
-    status_epkm = "✅ Efficient" if 0 < energy_per_km < 3 else ("⚠️ Out of range" if 0 < energy_per_km < 5 else "❌ Fail")
+    status_prod = "ᕙ(  •̀ ᗜ •́  )ᕗ Good" if productive_fraction > 0.5 else (" (╥ᆺ╥；)  Low" if productive_fraction > 0.35 else "( ｡ •̀ ᴖ •́ ｡) Fail")
+    status_unp = "ᕙ(  •̀ ᗜ •́  )ᕗ Good" if unproductive_fraction < 0.5 else (" (╥ᆺ╥；)  High" if unproductive_fraction < 0.65 else "( ｡ •̀ ᴖ •́ ｡) Fail")
+    status_epkm = "ᕙ(  •̀ ᗜ •́  )ᕗ Good" if 0 < energy_per_km < 3 else (" (╥ᆺ╥；)  Out of range" if 0 < energy_per_km < 5 else "( ｡ •̀ ᴖ •́ ｡) Fail")
 
     insights_df = pd.DataFrame({
         "Metric": [
@@ -136,11 +139,11 @@ def calculate_insights(df: pd.DataFrame, distance_lookup: pd.DataFrame,
         "Status": [status_prod, status_unp, status_epkm]
     })
 
-    st.markdown("### 📊 Performance KPIs")
+    st.markdown("### Performance KPIs")
     st.dataframe(insights_df.style.applymap(
-        lambda val: "background-color:#4CAF50; color:white" if "✅" in str(val)
-        else ("background-color:#FFEB3B; color:black" if "⚠️" in str(val)
-              else ("background-color:#F44336; color:white" if "❌" in str(val) else "")),
+        lambda val: "background-color:#4CAF50; color:white" if "ᕙ(  •̀ ᗜ •́  )ᕗ" in str(val)
+        else ("background-color:#FFEB3B; color:black" if " (╥ᆺ╥；) " in str(val)
+              else ("background-color:#F44336; color:white" if "( ｡ •̀ ᴖ •́ ｡)" in str(val) else "")),
         subset=["Status"]
     ), use_container_width=True)
 
@@ -155,32 +158,33 @@ def calculate_insights(df: pd.DataFrame, distance_lookup: pd.DataFrame,
         use_container_width=True
     )
 
-    st.markdown("### ✅ Feasibility Checks")
+    st.markdown("### Feasibility Checks")
     df_soc, initial_charge = energy_state(df, full_new_battery, state_of_health_frac)
 
     feas_data = []
 
     soc_ok = check_energy_feasibility(df_soc, initial_charge, low, high)
-    feas_data.append({"Check": "Battery charge within bounds", "Result": "✅ Pass" if soc_ok else "❌ Fail"})
+    feas_data.append({"Check": "Battery charge within bounds", "Result": "ᕙ(  •̀ ᗜ •́  )ᕗ Pass" if soc_ok else "( ｡ •̀ ᴖ •́ ｡) Fail"})
 
     invalid_buses = validate_start_end_locations(df_soc, start_end_location)
     feas_data.append({"Check": f"Depot start/end at {start_end_location}",
-                      "Result": "✅ Pass" if invalid_buses.empty else f"❌ {len(invalid_buses)} fail"})
+                      "Result": "ᕙ(  •̀ ᗜ •́  )ᕗ Pass" if invalid_buses.empty else f"( ｡ •̀ ᴖ •́ ｡) {len(invalid_buses)} fail"})
 
     insufficient = minimum_charging(df_soc, min_charging_minutes)
     feas_data.append({"Check": f"Min charging ≥ {min_charging_minutes} min",
-                      "Result": "✅ Pass" if insufficient.empty else f"❌ {len(insufficient)} short"})
+                      "Result": "ᕙ(  •̀ ᗜ •́  )ᕗ Pass" if insufficient.empty else f"( ｡ •̀ ᴖ •́ ｡) {len(insufficient)} short"})
 
+    timetable_df = rename_time_object(timetable_df, "departure_time", "Not Inside")
     is_valid, mismatched = fulfills_timetable(df_soc, timetable_df)
     feas_data.append({"Check": "Timetable coverage",
-                      "Result": "✅ Pass" if is_valid else f"❌ {len(mismatched)} unmatched"})
+                      "Result": "ᕙ(  •̀ ᗜ •́  )ᕗ Pass" if is_valid else f"( ｡ •̀ ᴖ •́ ｡) {len(mismatched)} unmatched"})
 
     feasibility_df = pd.DataFrame(feas_data)
 
     st.dataframe(feasibility_df.style.applymap(
-        lambda val: "background-color:#4CAF50; color:white" if "✅" in str(val)
-        else ("background-color:#F44336; color:white" if "❌" in str(val)
-              else ("background-color:#FFEB3B; color:black" if "⚠️" in str(val) else "")),
+        lambda val: "background-color:#4CAF50; color:white" if "ᕙ(  •̀ ᗜ •́  )ᕗ" in str(val)
+        else ("background-color:#F44336; color:white" if "( ｡ •̀ ᴖ •́ ｡)" in str(val)
+              else ("background-color:#FFEB3B; color:black" if " (╥ᆺ╥；) " in str(val) else "")),
         subset=["Result"]
     ), use_container_width=True)
 
@@ -210,7 +214,7 @@ def export_to_excel(df: pd.DataFrame, filename: str = "gantt_export.xlsx"):
     output.seek(0)
 
     st.download_button(
-        label="📥 Download Excel",
+        label="Download Excel",
         data=output.getvalue(),
         file_name=filename,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -221,11 +225,11 @@ def export_to_excel(df: pd.DataFrame, filename: str = "gantt_export.xlsx"):
 # Controls
 # --------------------------------------------------------
 def display_feasibility_vars():
-    st.number_input("🔋 Full New Battery (kWh)", 0, 1000, 300, step=10, help="Nominal new-battery capacity")
-    st.slider("⚡ State of Health Fraction", 0.0, 1.0, 0.85, 0.01, help="Battery degradation factor")
-    st.slider("🔌 Charge Feasibility Range", 0.0, 1.0, (0.1, 0.9), 0.01, help="Allowed min/max SOC fraction")
-    st.number_input("⏱️ Minimum Charging Minutes", 0, 240, 15, step=1)
-    st.text_input("🏁 Must Start/End Location", value="ehvgar")
+    st.number_input("Full New Battery (kWh)", 0, 1000, 300, step=10, help="Nominal new-battery capacity")
+    st.slider("State of Health Fraction", 0.0, 1.0, 0.85, 0.01, help="Battery degradation factor")
+    st.slider("Charge Feasibility Range", 0.0, 1.0, (0.1, 0.9), 0.01, help="Allowed min/max SOC fraction")
+    st.number_input(" Minimum Charging Minutes", 0, 240, 15, step=1)
+    st.text_input(" Must Start/End Location", value="ehvgar")
 
 
 def display_inaccuracy_vars():
@@ -241,7 +245,7 @@ def display_inaccuracy_vars():
 def display_df(excel: pd.DataFrame, label: str = "Files"):
     """Browse DataFrame in collapsible preview."""
     try:
-        with st.expander(f"👀 Preview {label} (first 5 rows)"):
+        with st.expander(f"Preview {label} (first 5 rows)"):
             st.dataframe(excel.head(), use_container_width=True)
     except Exception as e:
         st.error(f"Could not preview {label}: {e}")
@@ -250,7 +254,7 @@ def display_df(excel: pd.DataFrame, label: str = "Files"):
 # --------------------------------------------------------
 # Donation
 # --------------------------------------------------------
-@st.dialog("💸 Donate")
+@st.dialog("Donate")
 def donate_popup():
     st.markdown("### ☕ Buy me a Coffee?")
     st.markdown("""
@@ -261,4 +265,4 @@ def donate_popup():
 
 def donate_button():
     """Small footer donation button."""
-    st.button("💸 Donate", type="primary", on_click=donate_popup)
+    st.button("Donate", type="primary", on_click=donate_popup)
