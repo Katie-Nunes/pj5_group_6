@@ -57,18 +57,6 @@ def minimum_charging(df, min_charging_minutes=15):
     return bad
 
 def fulfills_timetable(df, timetable_df):
-    df_starts = set(df['start time'])
-    timetable_starts = set(timetable_df['departure_time'])
-    mismatch = timetable_starts - df_starts
-    #FIX THIS TO CHECK PER LINE
-    if mismatch:
-        report_error(f"Missing timetable start times: {len(mismatch)} unmatched")
-        return False, mismatch
-    report_info("ᕙ(  •̀ ᗜ •́  )ᕗ Timetable matches covered")
-    return True, set()
-
-
-def fulfills_timetable(df, timetable_df):
     service_trips = df[df['activity'] == 'service trip']
 
     service_trip_set = set(zip(
