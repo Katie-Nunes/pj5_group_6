@@ -105,7 +105,17 @@ def calculate_insights(df: pd.DataFrame, distance_lookup: pd.DataFrame,
     """
     Calculate and display performance KPIs and feasibility checks with traffic-light coloring.
     """
-
+    # Update parameters from session state if available
+    if 'battery_capacity' in st.session_state:
+        full_new_battery = st.session_state.battery_capacity
+    if 'soh' in st.session_state:
+        state_of_health_frac = st.session_state.soh
+    if 'charge_range' in st.session_state:
+        low, high = st.session_state.charge_range
+    if 'min_charge_minutes' in st.session_state:
+        min_charging_minutes = st.session_state.min_charge_minutes
+    if 'start_end_location' in st.session_state:
+        start_end_location = st.session_state.start_end_location
 
 
     # --- Core Metrics ---
@@ -224,23 +234,51 @@ def export_to_excel(df: pd.DataFrame, filename: str = "gantt_export.xlsx"):
 # --------------------------------------------------------
 # Controls
 # --------------------------------------------------------
-def display_feasibility_vars():
-    st.number_input("Full New Battery (kWh)", 0, 1000, 300, step=10, help="Nominal new-battery capacity")
-    st.slider("State of Health Fraction", 0.0, 1.0, 0.85, 0.01, help="Battery degradation factor")
-    st.slider("Charge Feasibility Range", 0.0, 1.0, (0.1, 0.9), 0.01, help="Allowed min/max SOC fraction")
-    st.number_input(" Minimum Charging Minutes", 0, 240, 15, step=1)
-    st.text_input(" Must Start/End Location", value="ehvgar")
+import streamlit as st
 
+def display_feasibility_vars():
+    # Capture values and store in session state
+    st.session_state.battery_capacity = st.number_input(
+        "Full New Battery (kWh)", 0, 1000, 300, step=10,
+        help="Nominal new-battery capacity"
+    )
+    st.session_state.soh = st.slider(
+        "State of Health Fraction", 0.0, 1.0, 0.85, 0.01,
+        help="Battery degradation factor"
+    )
+    st.session_state.charge_range = st.slider(
+        "Charge Feasibility Range", 0.0, 1.0, (0.1, 0.9), 0.01,
+        help="Allowed min/max SOC fraction"
+    )
+    st.session_state.min_charge_minutes = st.number_input(
+        "Minimum Charging Minutes", 0, 240, 15, step=1
+    )
+    st.session_state.start_end_location = st.text_input(
+        "Must Start/End Location", value="ehvgar"
+    )
 
 def display_inaccuracy_vars():
-    st.number_input("Max Idle Period (minutes)", 0, 1440, 120, 1)
-    st.number_input("Idle Cost (kWh/hr)", 0.0, 100.0, 5.0, 0.1)
-    st.number_input("Charge Speed (kW)", 0.0, 100.0, 7.5, 0.1)
-    st.slider("Charge Error Margin", 0.0, 2.0, (0.9, 1.1), 0.01)
-    st.slider("Energy Use Margin (kWh/km)", 0.0, 5.0, (0.7, 2.5), 0.01)
-    st.slider("Idle Cost Margin", 0.0, 2.0, (0.9, 1.1), 0.01)
-    st.text_input("Discard Location", "ehvgar")
-
+    st.session_state.max_idle = st.number_input(
+        "Max Idle Period (minutes)", 0, 1440, 120, 1
+    )
+    st.session_state.idle_cost = st.number_input(
+        "Idle Cost (kWh/hr)", 0.0, 100.0, 5.0, 0.1
+    )
+    st.session_state.charge_speed = st.number_input(
+        "Charge Speed (kW)", 0.0, 100.0, 7.5, 0.1
+    )
+    st.session_state.charge_error = st.slider(
+        "Charge Error Margin", 0.0, 2.0, (0.9, 1.1), 0.01
+    )
+    st.session_state.energy_margin = st.slider(
+        "Energy Use Margin (kWh/km)", 0.0, 5.0, (0.7, 2.5), 0.01
+    )
+    st.session_state.idle_margin = st.slider(
+        "Idle Cost Margin", 0.0, 2.0, (0.9, 1.1), 0.01
+    )
+    st.session_state.discard_location = st.text_input(
+        "Discard Location", "ehvgar"
+    )
 
 def display_df(excel: pd.DataFrame, label: str = "Files"):
     """Browse DataFrame in collapsible preview."""

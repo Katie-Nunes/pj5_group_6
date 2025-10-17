@@ -1,8 +1,23 @@
+from check_inaccuracies import ensure_packages
+ensure_packages(['pandas', 'numpy', 'streamlit', 'plotly', 'xlsxwriter', 'datetime'])
+
+
 import streamlit as st
 import logging
 from check_inaccuracies import check_for_inaccuracies, rename_time_object
 import app_visualization_functions as avm
 from logging_utils import report_error, report_warning, report_info
+
+if 'battery_capacity' in st.session_state:
+    full_new_battery = st.session_state.battery_capacity
+if 'soh' in st.session_state:
+    state_of_health_frac = st.session_state.soh
+if 'charge_range' in st.session_state:
+    low, high = st.session_state.charge_range
+if 'min_charge_minutes' in st.session_state:
+    min_charging_minutes = st.session_state.min_charge_minutes
+if 'start_end_location' in st.session_state:
+    start_end_location = st.session_state.start_end_location
 
 # --------------------------------------------------------
 # Setup
@@ -121,7 +136,12 @@ with tab_insight:
                 insights_df, feasibility_df = avm.calculate_insights(
                     gantt_df,
                     distancematrix_df,
-                    timetable_df
+                    timetable_df,
+                    full_new_battery,
+                    state_of_health_frac,
+                    low, high,
+                    min_charging_minutes,
+                    start_end_location
                 )
             except Exception as e:
                 report_error(f"Could not calculate insights: {e}", exception=e)

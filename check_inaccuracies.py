@@ -235,8 +235,7 @@ def check_energy_consumption(
 
     for idx, row in df.iterrows():
         try:
-            activity, energy, minutes = row['activity'], row['energy consumption'], row[
-                                                                                        'time_taken'].total_seconds() / 60
+            activity, energy, minutes = row['activity'], row['energy consumption'], row['time_taken'].total_seconds() / 60
 
             if activity == 'charging':
                 low, high = -charge_speed_assumed * minutes * low_charge_rate, -charge_speed_assumed * minutes * high_charge_rate
