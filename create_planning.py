@@ -3,8 +3,8 @@ import datetime
 from check_inaccuracies import rename_time_object, validate_dataframe_structure
 from check_feasbility import check_energy_feasibility
 
-def create_service_record(start_location, end_location, departure_time, line, bus_id, distance_matrix):
-    travel_time, distance_m, _ = lookup_distance_matrix(start_location, end_location, line, distance_matrix)
+def create_service_record(start_location, end_location, departure_time, line, bus_id, distance_matrix, current_energy):
+    travel_time, energy_use = lookup_distance_matrix(start_location, end_location, line, distance_matrix)
     arrival_time = departure_time + datetime.timedelta(minutes=travel_time)
 
     record = [
@@ -14,44 +14,48 @@ def create_service_record(start_location, end_location, departure_time, line, bu
         arrival_time.strftime('%H:%M:%S'),
         "service trip",
         line,
-        distance_m / 1000,  # convert meters to km
+        current_energy - energy_use,
         bus_id,
     ]
     return record
 
-def create_idle_record(location, start_time, end_time, line, bus_id):
+def create_idle_record(location, start_time, end_time, line, bus_id, current_energy):
+    delta = (end_time - start_time).total_seconds() / 3600.0
+    idle_cost = delta * 5
+    ending_energy = max(0.0, current_energy - idle_cost)  # Clamp to >=0
+
     record = [
         location,
         location,
         start_time.strftime('%H:%M:%S'),
-        end_time.strftime('%H:%M:%S'),
+        (end_time.strftime('%H:%M:%S') if end_time else None),
         "idle",
         line,
-        0,  # no distance covered
+        ending_energy,
         bus_id,
     ]
     return record
 
-def create_charging_record(start_time, charging_time, line, bus_id, charge_speed_assumed=60):
+def create_charging_record(start_time, charging_time, line, bus_id, current_energy, charge_speed_assumed=60):
     """Create a record for a charging session."""
     end_time = start_time + datetime.timedelta(minutes=charging_time)
-    charging_amount = charging_time * -charge_speed_assumed  # negative implies energy consumption
+    charging_amount = charging_time * charge_speed_assumed
 
     record = [
-        "ehvgar",  # start location (garage)
-        "ehvgar",  # end location (garage)
+        "ehvgar",
+        "ehvgar",
         start_time.strftime('%H:%M:%S'),
         end_time.strftime('%H:%M:%S'),
         "charging",
         line,
-        charging_amount,
+        current_energy + charging_amount,
         bus_id,
     ]
     return record
 
-def create_material_record(destination, line, departure_time, distance_matrix, bus_id):
+def create_material_record(destination, line, departure_time, distance_matrix, bus_id, current_energy):
     start_location = "ehvgar"
-    travel_time, distance_m, _ = lookup_distance_matrix(start_location, destination, line, distance_matrix)
+    travel_time, energy_use = lookup_distance_matrix(start_location, destination, line, distance_matrix)
     arrival_time = departure_time + datetime.timedelta(minutes=travel_time)
 
     record = [
@@ -61,7 +65,7 @@ def create_material_record(destination, line, departure_time, distance_matrix, b
         arrival_time.strftime('%H:%M:%S'),
         "material trip",
         line,
-        distance_m / 1000,  # convert meters to km
+        current_energy - energy_use,
         bus_id,
     ]
     return record
@@ -80,7 +84,11 @@ def lookup_distance_matrix(start, end, line, distance_matrix_df):
         ]
     max_travel_time = int(row.iloc[0]['max_travel_time'])
     distance_km = (int(row.iloc[0]['distance_m'])/1000)
-    return max_travel_time, distance_km, 0
+    energy_use = distance_km*1.6
+    return max_travel_time, energy_use
+
+
+
 
 
 
