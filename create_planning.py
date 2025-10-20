@@ -53,14 +53,13 @@ def create_charging_record(start_time, charging_time, line, bus_id, current_ener
     ]
     return record
 
-def create_material_record(destination, line, departure_time, distance_matrix, bus_id, current_energy):
-    start_location = "ehvgar"
-    travel_time, energy_use = lookup_distance_matrix(start_location, destination, line, distance_matrix)
+def create_material_record(start_location, end_location, line, departure_time, distance_matrix, bus_id, current_energy):
+    travel_time, energy_use = lookup_distance_matrix(start_location, end_location, line, distance_matrix)
     arrival_time = departure_time + datetime.timedelta(minutes=travel_time)
 
     record = [
         start_location,
-        destination,
+        end_location,
         departure_time.strftime('%H:%M:%S'),
         arrival_time.strftime('%H:%M:%S'),
         "material trip",
@@ -87,76 +86,52 @@ def lookup_distance_matrix(start, end, line, distance_matrix_df):
     energy_use = distance_km*1.6
     return max_travel_time, energy_use
 
+def create_garage_trips(timetable, distance_matrix, row, bus_id, current_energy, togarage=False):
+    locations = {loc: {} for loc in set(timetable['start']).union(timetable['end'])}
+    row_values = {}
+    for column in ["start", "departure_time", "end", "line"]:
+        row_values[column] = timetable.at[row, column]
+
+    if togarage:
+        record = create_material_record(row_values["start"], 'ehvgar', row_values["line"], row_values["departure_time"], distance_matrix, bus_id, current_energy)
+        locations.setdefault("ehvgar", []).append(bus_id) # this is kinda iffy, maybe change method of doing this later
+        return record
+
+    else: #From garage to whatever the hell the current location is
+        if "ehvgar" in locations and locations["ehvgar"] is False: # Check if value in ehvgar dict is empty list (no busses at garage)
+            new_bus_id = max(list(locations.values())) + 1 #get highest then plus 1
+            record = create_material_record('ehvgar', row_values["start"], row_values["line"], row_values["departure_time"], distance_matrix, new_bus_id, 255) # new bus always start at max of SoH
+            locations[row_values["start"]].append(new_bus_id)
+            return record
+        else: # there is already at least one bus at garage
+            garage_busses = locations.get("ehvgar")
+            for busses in garage_busses:
+                # for every bus in there check battery level, pick highest one which also fulfills this
+                # Check bus battery (Go back in time and see bus battery needs to leave is >60% (arbitrary) )
+                pass  # return best bus
+
+                if False:  # Yes, battery above 60%
+                    pass
+                else:
+                    new_bus_id = max(list(locations.values())) + 1 #get highest then plus 1
+                    record = create_material_record('ehvgar', row_values["start"], row_values["line"], row_values["departure_time"], distance_matrix, new_bus_id, 255) # new bus always start at max of SoH
+                    locations[row_values["start"]].append(new_bus_id)
+                    return record
+            pass
+
+        record = create_material_record('ehvgar', row_values["start"], row_values["line"], row_values["departure_time"], distance_matrix, bus_id, current_energy)
+        return record
 
 
 
 
 
-
-
-def initialize_buses(timetable, distance_matrix, next_bus_id=1, home="ehvgar"):
-    """Ensure each location has a bus, generating simple material trips if needed."""
-    locations = set(timetable['start']).union(timetable['end'])
-    locations.discard(home)
-
-    trips, bus_locations = [], {}
-    earliest_departure = timetable['departure_time'].min()
-
-    for location in locations:
-        line = timetable.loc[timetable['start'] == location, 'line'].iloc[0]
-        trip = create_material_record(location, line, earliest_departure, distance_matrix, next_bus_id)
-        trips.append(trip)
-        bus_locations[next_bus_id] = location
-        next_bus_id += 1
-    return trips, bus_locations, next_bus_id
-
-
-def assign_bus(row, bus_locations, distance_matrix, generated_data, next_bus_id):
-    """Either reuse an idle bus or fetch one from the garage."""
-    start, end, dep, line = row['start'], row['end'], row['departure_time'], row['line']
-
-    # find any idle bus already at the start location
-    for bus_id, loc in bus_locations.items():
-        if loc == start:
-            trip = create_service_record(start, end, dep, line, bus_id, distance_matrix)
-            generated_data.append(trip)
-            bus_locations[bus_id] = end
-            return next_bus_id
-
-    # otherwise, bring a fresh bus from the garage
-    travel_time, _, _ = lookup_distance_matrix("ehvgar", start, line, distance_matrix)
-    garage_depart = dep - datetime.timedelta(minutes=travel_time)
-
-    material_trip = create_material_record(start, line, garage_depart, distance_matrix, next_bus_id)
-    generated_data.append(material_trip)
-
-    service_trip = create_service_record(start, end, dep, line, next_bus_id, distance_matrix)
-    generated_data.append(service_trip)
-
-    bus_locations[next_bus_id] = end
-    return next_bus_id + 1
-
-
-def main_timetable_iteration(timetable, distance_matrix, next_bus_id=1):
-    """Single‑pass timetable processing — simplified bus planning."""
-    generated_data = []
-
-    # initialize at least one bus per active location
-    init_trips, bus_locations, next_bus_id = initialize_buses(timetable, distance_matrix, next_bus_id)
-    generated_data.extend(init_trips)
-
-    # create service trips for each timetable entry
-    for _, row in timetable.iterrows():
-        next_bus_id = assign_bus(row, bus_locations, distance_matrix, generated_data, next_bus_id)
-    return generated_data, next_bus_id
-
-
-
-
-
+def main_timetable_iteration(timetable, distance_matrix):
+    pass
 
 def create_planning(timetable, distance_matrix):
     timetable = (rename_time_object(timetable, "departure_time", "Not Inside").sort_values(by="departure_time"))
+    timetable.columns = [col.replace(' ', '_').lower() for col in timetable.columns]
     generated_data, _ = main_timetable_iteration(timetable, distance_matrix)
 
     df = pd.DataFrame(generated_data, columns=["start location", "end location", "start time", "end time","activity", "line", "energy consumption", "bus"])
