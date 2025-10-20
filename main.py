@@ -26,8 +26,6 @@ def main (planning_df, timetable_df, distancematrix_df, debug=True):
         df = create_planning(timetable_df, distancematrix_df)
         #df = check_for_inaccuracies(planning_df, timetable_df, distancematrix_df)
         #tt, missing_trips = check_all_feasibility(df, timetable_df)
-        #print(missing_trips)
-        #df = create_planning(TIMETABLE, DISTANCEMATRIX)
     return df
 
 if __name__ == "__main__":

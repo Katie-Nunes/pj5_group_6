@@ -150,7 +150,7 @@ def calculate_insights(df: pd.DataFrame, distance_lookup: pd.DataFrame,
     })
 
     st.markdown("### Performance KPIs")
-    st.dataframe(insights_df.style.applymap(
+    st.dataframe(insights_df.style.map(
         lambda val: "background-color:#4CAF50; color:white" if "ᕙ(  •̀ ᗜ •́  )ᕗ" in str(val)
         else ("background-color:#FFEB3B; color:black" if " (╥ᆺ╥；) " in str(val)
               else ("background-color:#F44336; color:white" if "( ｡ •̀ ᴖ •́ ｡)" in str(val) else "")),
@@ -191,7 +191,7 @@ def calculate_insights(df: pd.DataFrame, distance_lookup: pd.DataFrame,
 
     feasibility_df = pd.DataFrame(feas_data)
 
-    st.dataframe(feasibility_df.style.applymap(
+    st.dataframe(feasibility_df.style.map(
         lambda val: "background-color:#4CAF50; color:white" if "ᕙ(  •̀ ᗜ •́  )ᕗ" in str(val)
         else ("background-color:#F44336; color:white" if "( ｡ •̀ ᴖ •́ ｡)" in str(val)
               else ("background-color:#FFEB3B; color:black" if " (╥ᆺ╥；) " in str(val) else "")),
