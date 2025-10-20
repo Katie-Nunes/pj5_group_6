@@ -1,7 +1,6 @@
 import pandas as pd
 import datetime
 from datetime import date
-import numpy as np
 from check_inaccuracies import rename_time_object, validate_dataframe_structure
 #from check_feasibility import check_energy_feasibility
 
@@ -45,7 +44,7 @@ def create_charging_record(start_time, charging_time, line, bus_id, current_ener
     end_time = start_time + datetime.timedelta(minutes=charging_time)
     charging_amount = charging_time * charge_speed_assumed
     new_current_energy = current_energy + charging_amount
-    min(new_current_energy, 229.5) # cap at 90% to not have to deal with slow charging
+    new_new_current_energy = min([new_current_energy, 229.5]) # cap at 90% to not have to deal with slow charging
     record = [
         "ehvgar",
         "ehvgar",
@@ -53,7 +52,7 @@ def create_charging_record(start_time, charging_time, line, bus_id, current_ener
         end_time.strftime('%H:%M:%S'),
         "charging",
         line,
-        new_current_energy,
+        new_new_current_energy,
         bus_id,
     ]
     return record
@@ -73,7 +72,6 @@ def create_material_record(start_location, end_location, line, departure_time, d
         bus_id,
     ]
     return record
-
 
 def lookup_distance_matrix(start, end, line, distance_matrix_df):
     # Determine the line to use based on garage condition
@@ -127,7 +125,9 @@ def create_garage_trips(timetable, distance_matrix, index,  locations, charging_
             all_bus_ids = [bid for loc_list in locations.values() for bid in loc_list]
             new_bus_id = max(all_bus_ids) + 1 if all_bus_ids else 1
             locations[row_values["start"]].append(new_bus_id)
-            record = create_material_record('ehvgar', row_values["start"], row_values["line"], row_values["departure_time"], distance_matrix, new_bus_id, 255)  # new bus always start at max of SoH
+            max_tt, _ = lookup_distance_matrix('ehvgar', row_values["start"], row_values["line"], distance_matrix)
+            pre_trip_depart = row_values["departure_time"] # - max_time taken in timedelta
+            record = create_material_record('ehvgar', row_values["start"], row_values["line"], pre_trip_depart, distance_matrix, new_bus_id, 255)  # new bus always start at max of SoH
             return record, None
 
         # If garage has buses: evaluate viable options
@@ -141,17 +141,24 @@ def create_garage_trips(timetable, distance_matrix, index,  locations, charging_
                 continue  # Skip if bus has no charging history
 
             most_recent_arrival_str = max(item["arrival_time"] for item in charging_dict[bus_id])  # get the most recent item of the specific bus of the list of datetime objects inside charging_dict
-            most_recent_arrival = datetime.datetime.combine(date.today(), datetime.datetime.strptime(most_recent_arrival_str, "%H:%M:%S").time())
+            most_recent_arrival_dt = datetime.datetime.combine(date.today(), datetime.datetime.strptime(most_recent_arrival_str, "%H:%M:%S").time())
+            most_recent_arrival_final = pd.Timestamp(most_recent_arrival_dt)
+
             travel_gar_to_loc, _ = lookup_distance_matrix('ehvgar', row_values["end"], row_values["line"], distance_matrix)
-            time_charging = row_values["departure_time"] - most_recent_arrival - datetime.timedelta(minutes=travel_gar_to_loc)  # Calculated the total time the bus would spend charging assuming it leaves early to be on departure on time
+            travel_gar = datetime.timedelta(minutes=(travel_gar_to_loc))
+
+            time_charging = (most_recent_arrival_final - row_values["departure_time"]) - travel_gar # Calculated the total time the bus would spend charging assuming it leaves early to be on departure on time
             time_charging_hours = time_charging.total_seconds() / 3600
+
             charged_amount = time_charging_hours * 450
-            bus_pre_depart_energy = charging_dict[bus_id][-1]["ze_energy"] + charged_amount  # Use the last recorded energy level
+            bus_pre_depart_energy = min(charging_dict[bus_id][-1]["ze_energy"] + charged_amount, 229.5 ) # Use the last recorded energy level
 
             if bus_pre_depart_energy >= 153:
+                q = True
                 viable_bus_ids[bus_id] = bus_pre_depart_energy
-
-        if not viable_bus_ids:
+            else:
+                q = False
+        if q is False:
             # No viable buses: create new one
             all_bus_ids = [bid for loc_list in locations.values() for bid in loc_list]
             new_bus_id = max(all_bus_ids) + 1 if all_bus_ids else 1
@@ -160,8 +167,7 @@ def create_garage_trips(timetable, distance_matrix, index,  locations, charging_
             record = create_material_record('ehvgar', row_values["start"], row_values["line"], row_values["departure_time"], distance_matrix, new_bus_id, 255)  # new bus always start at max of SoH
         else:
             best_bus = max(viable_bus_ids, key=viable_bus_ids.get)
-            charging_record = create_charging_record(most_recent_arrival, (time_charging_hours/60), "999", best_bus, bus_pre_depart_energy)
-
+            charging_record = create_charging_record(most_recent_arrival_final, (time_charging_hours*60), "999", best_bus, bus_pre_depart_energy)
             locations["ehvgar"].remove(best_bus)
             locations[row_values["start"]].append(best_bus)
 
@@ -186,11 +192,12 @@ def main_timetable_iteration(timetable, distance_matrix, locations, charging_dic
             row_vals[column] = timetable.at[index, column]
 
         busses_at_current_location = locations[row_vals["start"]]
-        if not busses_at_current_location:
+        if not busses_at_current_location: # For some reason this onlly runs twice??
             pre_trip, charging_trip = create_garage_trips(timetable, distance_matrix, index, locations, charging_dict)
-
+            print(charging_trip)
             trip = create_service_record(row_vals["start"], row_vals["end"], row_vals["departure_time"], row_vals["line"], bus_id, distance_matrix, current_energy, )
-            if charging_trip:
+            if charging_trip is not None:
+                print("DICKS 2")
                 generated_data = pd.concat([
                     generated_data,
                     pd.DataFrame([charging_trip], columns=generated_data.columns),
@@ -205,11 +212,11 @@ def main_timetable_iteration(timetable, distance_matrix, locations, charging_dic
                 ], ignore_index=True)
 
         else:
-            if current_energy > 25.5: #10%
+            if current_energy > 51: #20% (at this point we just hope it doesn't dip below 10%)
                 # No need for idle since that gets fixed in post by other script. create_idle_record(row_vals["start"], start_time, row_vals["departure_time"], bus_id, current_energy) # if a bus is never used again it doesn't get an idling record, ditto with charging
                 current_energy = generated_data["energy consumption"].iloc[-1]
                 trip = create_service_record(row_vals["start"], row_vals["end"], row_vals["departure_time"], row_vals["line"], bus_id, distance_matrix, current_energy, )
-                generated_data = pd.concat([generated_data, pd.DataFrame([pre_trip], columns=generated_data.columns)], ignore_index=True)
+                generated_data = pd.concat([generated_data, pd.DataFrame([trip], columns=generated_data.columns)], ignore_index=True)
             else:
                 send_to_garage = create_garage_trips(timetable, distance_matrix, index, locations, charging_dict, bus_id, current_energy) # Assumes energy doesn't run out while idling
                 pre_trip, _ = create_garage_trips(timetable, distance_matrix, index, locations, charging_dict)
@@ -227,13 +234,13 @@ def create_planning(timetable, distance_matrix):
     charging_dict = {}
 
     timetable = (rename_time_object(timetable, "departure_time", "Not Inside").sort_values(by="departure_time"))
-    timetable.columns = [col.replace(' ', '_').lower() for col in timetable.columns]
+    #timetable.columns = [col.replace(' ', '_').lower() for col in timetable.columns]
 
     generated_data = main_timetable_iteration(timetable, distance_matrix, locations, charging_dict)
+    # convert energy consumption back to what it should be
+
     validate_dataframe_structure(generated_data, apply=True)
 
     generated_data.to_excel("Excel Files/CREATED.xlsx", index=False)
     return generated_data
 
-
-print("tits")
