@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import datetime
 from check_inaccuracies import rename_time_object, validate_dataframe_structure
 from check_feasbility import check_energy_feasibility
@@ -87,39 +88,66 @@ def lookup_distance_matrix(start, end, line, distance_matrix_df):
     return max_travel_time, energy_use
 
 def create_garage_trips(timetable, distance_matrix, row, bus_id, current_energy, togarage=False):
-    locations = {loc: {} for loc in set(timetable['start']).union(timetable['end'])}
+    locations = {loc: [] for loc in set(timetable['start']).union(timetable['end'])}
     row_values = {}
+    chargingz = {}
+
+    # Get just the current values from the timetable row
     for column in ["start", "departure_time", "end", "line"]:
         row_values[column] = timetable.at[row, column]
 
     if togarage:
+        if row_values["start"] in locations and bus_id in locations[row_values["start"]]:
+            locations[row_values["start"]].remove(bus_id)
+        locations.setdefault("ehvgar", []).append(bus_id)  # this is kinda iffy, maybe change method of doing this later
         record = create_material_record(row_values["start"], 'ehvgar', row_values["line"], row_values["departure_time"], distance_matrix, bus_id, current_energy)
-        locations.setdefault("ehvgar", []).append(bus_id) # this is kinda iffy, maybe change method of doing this later
+        chargingz[bus_id] = chargingz.get(bus_id, [])  # Initialize if not present
+        chargingz[bus_id].append({"arrival_time": record[3], "ze_energy": current_energy})  # Iloc to 4th item inside the record list, end time
         return record
 
-    else: #From garage to whatever the hell the current location is
-        if "ehvgar" in locations and locations["ehvgar"] is False: # Check if value in ehvgar dict is empty list (no busses at garage)
-            new_bus_id = max(list(locations.values())) + 1 #get highest then plus 1
-            record = create_material_record('ehvgar', row_values["start"], row_values["line"], row_values["departure_time"], distance_matrix, new_bus_id, 255) # new bus always start at max of SoH
+    else:
+        if not locations.get("ehvgar", []):
+            if row_values["start"] in locations and bus_id in locations[row_values["start"]]:
+                locations[row_values["start"]].remove(bus_id)
+
+            all_bus_ids = [bid for loc_list in locations.values() for bid in loc_list]
+            new_bus_id = max(all_bus_ids) + 1 if all_bus_ids else 1
             locations[row_values["start"]].append(new_bus_id)
+            record = create_material_record('ehvgar', row_values["start"], row_values["line"], row_values["departure_time"], distance_matrix, new_bus_id, 255)  # new bus always start at max of SoH
             return record
-        else: # there is already at least one bus at garage
-            garage_busses = locations.get("ehvgar")
-            for busses in garage_busses:
-                # for every bus in there check battery level, pick highest one which also fulfills this
-                # Check bus battery (Go back in time and see bus battery needs to leave is >60% (arbitrary) )
-                pass  # return best bus
 
-                if False:  # Yes, battery above 60%
-                    pass
-                else:
-                    new_bus_id = max(list(locations.values())) + 1 #get highest then plus 1
-                    record = create_material_record('ehvgar', row_values["start"], row_values["line"], row_values["departure_time"], distance_matrix, new_bus_id, 255) # new bus always start at max of SoH
-                    locations[row_values["start"]].append(new_bus_id)
-                    return record
-            pass
+        # If garage has buses: evaluate viable options
+        garage_buses = locations["ehvgar"]
+        viable_bus_ids = {}
 
-        record = create_material_record('ehvgar', row_values["start"], row_values["line"], row_values["departure_time"], distance_matrix, bus_id, current_energy)
+        for bus_id in garage_buses:
+            # Get charging records for the bus (safe fallback if no records exist)
+            bus_charging_records = chargingz.get(bus_id, [])
+            if not bus_charging_records:
+                continue  # Skip if bus has no charging history
+
+            most_recent_arrival = max(item["arrival_time"] for item in chargingz[bus])  # get the most recent item of the specific bus of the list of datetime objects inside charginz
+            travel_gar_to_loc, _ = lookup_distance_matrix('ehvgar', row_values["departure_time"], row_values["line"], distance_matrix)
+            time_charging = row_values["departure_time"] - most_recent_arrival - datetime.timedelta(minutes=travel_gar_to_loc)  # Calculated the total time the bus would spend charging assuming it leaves early to be on departure on time
+            time_charging_hours = time_charging.total_seconds() / 3600
+            charged_amount = time_charging_hours * 450
+            bus_pre_depart_energy = chargingz[bus_id][-1]["ze_energy"] + charged_amount  # Use the last recorded energy level
+
+            if bus_pre_depart_energy >= 153:
+                viable_bus_ids[bus_id] = bus_pre_depart_energy
+
+        if not viable_bus_ids:
+            # No viable buses: create new one
+            all_bus_ids = [bid for loc_list in locations.values() for bid in loc_list]
+            new_bus_id = max(all_bus_ids) + 1 if all_bus_ids else 1
+            locations[row_values["start"]].append(new_bus_id)
+            record = create_material_record('ehvgar', row_values["start"], row_values["line"], row_values["departure_time"], distance_matrix, new_bus_id, 255)  # new bus always start at max of SoH
+        else:
+            best_bus = max(viable_bus_ids, key=viable_bus_ids.get)
+            locations["ehvgar"].remove(best_bus)
+            locations[row_values["start"]].append(best_bus)
+            bus_pre_depart_energy = viable_bus_ids[best_bus]
+            record = create_material_record('ehvgar', row_values["start"], row_values["line"], row_values["departure_time"], distance_matrix, best_bus, bus_pre_depart_energy)
         return record
 
 
@@ -132,7 +160,7 @@ def main_timetable_iteration(timetable, distance_matrix):
 def create_planning(timetable, distance_matrix):
     timetable = (rename_time_object(timetable, "departure_time", "Not Inside").sort_values(by="departure_time"))
     timetable.columns = [col.replace(' ', '_').lower() for col in timetable.columns]
-    generated_data, _ = main_timetable_iteration(timetable, distance_matrix)
+    generated_data = main_timetable_iteration(timetable, distance_matrix)
 
     df = pd.DataFrame(generated_data, columns=["start location", "end location", "start time", "end time","activity", "line", "energy consumption", "bus"])
     validate_dataframe_structure(df, apply=True)
