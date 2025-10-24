@@ -114,6 +114,7 @@ def run_bus_scheduler(departures_file, travel_times_file, output_file, garage_lo
     departures = df_departures.to_dict(orient='records')
 
     # Travel times
+
     df_travel = pd.read_excel(travel_times_file)
     df_travel = df_travel.dropna(subset=['start', 'end', 'max_travel_time'])
 
