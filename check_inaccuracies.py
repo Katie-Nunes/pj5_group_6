@@ -296,11 +296,11 @@ def check_energy_consumption(
 
     # Summarize all errors in compact messages
     if invalid_charging:
-        errors.append(f"Charging energy outside expected range at rows {invalid_charging}")
+        errors.append(f"Charging energy outside expected range at rows {invalid_charging}, this is fixed automatically")
     if invalid_trip:
-        errors.append(f"Trip energy outside expected range at rows {invalid_trip}")
+        errors.append(f"Trip energy outside expected range at rows {invalid_trip}, this is fixed automatically")
     if invalid_idle:
-        errors.append(f"Idle energy outside expected range at rows {invalid_idle}")
+        errors.append(f"Idle energy outside expected range at rows {invalid_idle}, this is fixed automatically")
     if unknown_trip:
         errors.append(f"Unknown trip start/end combination at rows {unknown_trip}")
     if unknown_activity:
