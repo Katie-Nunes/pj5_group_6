@@ -119,6 +119,7 @@ def calculate_insights(df: pd.DataFrame, distance_lookup: pd.DataFrame,
 
 
     # --- Core Metrics ---
+    n_busses = max(df["bus"])
     total_time = df["time_taken"].sum()
     total_energy = df["energy consumption"].sum()
     activity_sums = df.groupby("activity")["time_taken"].sum()
@@ -131,22 +132,25 @@ def calculate_insights(df: pd.DataFrame, distance_lookup: pd.DataFrame,
     energy_per_km = total_distance and (total_energy / total_distance)
 
     # Assign KPI traffic lights
+    status_bus = "ᕙ(  •̀ ᗜ •́  )ᕗ Good" if n_busses < 20 else (" (╥ᆺ╥；) A lot of Busses" if n_busses > 25 else "( ｡ •̀ ᴖ •́ ｡) Too Many Busses")
     status_prod = "ᕙ(  •̀ ᗜ •́  )ᕗ Good" if productive_fraction > 0.5 else (" (╥ᆺ╥；)  Low" if productive_fraction > 0.35 else "( ｡ •̀ ᴖ •́ ｡) Fail")
     status_unp = "ᕙ(  •̀ ᗜ •́  )ᕗ Good" if unproductive_fraction < 0.5 else (" (╥ᆺ╥；)  High" if unproductive_fraction < 0.65 else "( ｡ •̀ ᴖ •́ ｡) Fail")
     status_epkm = "ᕙ(  •̀ ᗜ •́  )ᕗ Good" if 0 < energy_per_km < 3 else (" (╥ᆺ╥；)  Out of range" if 0 < energy_per_km < 5 else "( ｡ •̀ ᴖ •́ ｡) Fail")
 
     insights_df = pd.DataFrame({
         "Metric": [
+            "Number of Busses",
             "Productive Time Fraction (%)",
             "Unproductive Time Fraction (%)",
             "Energy Use (kWh / service km)"
         ],
         "Value": [
-            round(productive_fraction * 100, 2) if productive_fraction else 0,
-            round(unproductive_fraction * 100, 2) if unproductive_fraction else 0,
-            round(energy_per_km, 2) if energy_per_km else 0
+            float(round(n_busses, 2)) if productive_fraction else 0,
+            float(round(productive_fraction * 100, 2)) if productive_fraction else 0,
+            float(round(unproductive_fraction * 100, 2)) if unproductive_fraction else 0,
+            float(round(energy_per_km, 2)) if energy_per_km else 0
         ],
-        "Status": [status_prod, status_unp, status_epkm]
+        "Status": [status_bus, status_prod, status_unp, status_epkm]
     })
 
     st.markdown("### Performance KPIs")
@@ -172,6 +176,8 @@ def calculate_insights(df: pd.DataFrame, distance_lookup: pd.DataFrame,
     df_soc, initial_charge = energy_state(df, full_new_battery, state_of_health_frac)
 
     feas_data = []
+
+
 
     soc_ok = check_energy_feasibility(df_soc, initial_charge, low, high)
     feas_data.append({"Check": "Battery charge within bounds", "Result": "ᕙ(  •̀ ᗜ •́  )ᕗ Pass" if soc_ok else "( ｡ •̀ ᴖ •́ ｡) Fail"})
