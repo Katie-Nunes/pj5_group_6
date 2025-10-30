@@ -16,6 +16,7 @@ def energy_state(df, full_new_battery=300, state_of_health_frac=0.85):
         report_error("Error computing energy state", e)
         return df, 0
 
+
 def check_energy_feasibility(df, initial_charge, low=0.1, high=0.9):
     min_bat = initial_charge * low
     max_bat = initial_charge * high
@@ -23,11 +24,12 @@ def check_energy_feasibility(df, initial_charge, low=0.1, high=0.9):
     over = df[df['current_charge'] > max_bat]
 
     if not under.empty:
-        report_error(f"Some buses dip below minimum charge!{st.expander}")
-        # SHOW WHICH BUSES
+        failed_indices = under.index.tolist()
+        report_error(f"Some buses dip below minimum charge! Failed at rows: {failed_indices}")
         return False
     if not over.empty:
-        report_error(f"Some buses exceed maximum charge threshold")
+        failed_indices = over.index.tolist()
+        report_error(f"Some buses exceed maximum charge threshold! Failed at rows: {failed_indices}")
         return False
 
     report_info("ᕙ(  •̀ ᗜ •́  )ᕗ All trips are charge feasible", user=True)
@@ -45,7 +47,8 @@ def validate_start_end_locations(df, start_end_location="ehvgar"):
         (invalid['end'] != start_end_location)
     ]
     if not not_ok.empty:
-        report_warning("Some buses do not start/end at depot")
+        failed_indices = not_ok.index.tolist()
+        report_warning(f"Some buses do not start/end at depot {failed_indices}")
     return not_ok
 
 def minimum_charging(df, min_charging_minutes=15):
@@ -53,7 +56,8 @@ def minimum_charging(df, min_charging_minutes=15):
     threshold = pd.Timedelta(minutes=min_charging_minutes)
     bad = charging[charging['time_taken'] < threshold]
     if not bad.empty:
-        report_warning("Some charging blocks are shorter than minimum allowed")
+        failed_indices = bad.index.tolist()
+        report_warning(f"Some charging blocks are shorter than minimum allowed {failed_indices}")
     return bad
 
 def fulfills_timetable(df, timetable_df):
@@ -76,7 +80,8 @@ def fulfills_timetable(df, timetable_df):
     missing_trips = timetable_set - service_trip_set
 
     if missing_trips:
-        report_error(f"Missing {len(missing_trips)} timetable trips")
+        failed_indices = missing_trips.index.tolist()
+        report_error(f"Missing {len(missing_trips)} timetable trips, rows {failed_indices} of timetable are not covered")
         return False, missing_trips
 
     report_info("ᕙ(  •̀ ᗜ •́  )ᕗ Timetable matches covered")
@@ -94,8 +99,10 @@ def check_all_feasibility(df, timetable_df):
     feasible = energy_ok and timetable_ok
 
     if not invalid_buses.empty:
-        report_warning(f"Found {len(invalid_buses)} buses not starting/ending at depot")
+        failed_indices = invalid_buses.index.tolist()
+        report_warning(f"Found {len(invalid_buses)} buses not starting/ending at depot, at rows {failed_indices}")
 
     if not bad_charging.empty:
-        report_warning(f"Found {len(bad_charging)} charging blocks shorter than minimum")
+        failed_indices = bad_charging.index.tolist()
+        report_warning(f"Found {len(bad_charging)} charging blocks shorter than minimum, at rows {failed_indices}")
     return feasible, missing_trips

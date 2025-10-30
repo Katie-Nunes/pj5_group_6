@@ -135,16 +135,38 @@ def rename_time_object(df: pd.DataFrame, start_name: str, end_name: str) -> pd.D
 
 
 def check_datetime_sequence(df: pd.DataFrame) -> Tuple[List[str], pd.Series]:
-    """Check if datetime sequence is continuous and durations valid."""
     errors = []
 
-    if not (df['end time'] > df['start time']).all():
-        errors.append("Some rows have negative or zero duration")
+    # Ensure columns are datetime for robust comparison
+    df['start time'] = pd.to_datetime(df['start time'])
+    df['end time'] = pd.to_datetime(df['end time'])
 
+    # 1. Check for negative or zero duration
+    # Find rows where end time is not after start time
+    invalid_duration_mask = df['end time'] <= df['start time']
+    if invalid_duration_mask.any():
+        # Get the index of rows with invalid duration
+        invalid_indices = df[invalid_duration_mask].index.tolist()
+        errors.append(
+            f"Negative or zero duration found at indices: {invalid_indices}"
+        )
+
+    # 2. Check for gaps or overlaps in the sequence
+    # A sequence is continuous if the start time of the current row
+    # equals the end time of the previous row.
     continuity = df['start time'] == df['end time'].shift(1)
-    continuity.iloc[0] = True
+
+    # The first row has no previous row, so it's considered continuous by definition.
+    if not continuity.empty:
+        continuity.iloc[0] = True
+
     if not continuity.all():
-        errors.append("Datetime sequence has gaps or overlaps")
+        # Get the index of rows where continuity is False
+        # These are the rows that start the gap or overlap
+        gap_overlap_indices = continuity[~continuity].index.tolist()
+        errors.append(
+            f"Gaps or overlaps found starting at indices: {gap_overlap_indices}"
+        )
 
     return errors, continuity
 
@@ -210,6 +232,7 @@ def calc_timedelta(df: pd.DataFrame) -> pd.DataFrame:
 # -----------------------------
 # Energy Validation
 # -----------------------------
+
 def check_energy_consumption(
         df: pd.DataFrame,
         distancematrix: pd.DataFrame,
@@ -222,46 +245,69 @@ def check_energy_consumption(
         low_idle_cost: float,
         high_idle_cost: float,
 ) -> Tuple[pd.DataFrame, List[str]]:
-    """Validate per-row energy consumption against expected physical ranges."""
+    """Validate per-row energy consumption against expected physical ranges, summarizing all row indices per error type."""
     errors = []
-    distance_lookup = (distancematrix.set_index(['start', 'end'])['distance_m'].to_dict())
     df = df.copy()
+    distance_lookup = distancematrix.set_index(['start', 'end'])['distance_m'].to_dict()
 
-    def validate_range(idx, value, low, high, label) -> bool:
-        if not low <= value <= high:
-            errors.append(f"Row {idx}: {label} energy {value:.2f} outside range [{low:.2f}, {high:.2f}]")
-            return False
-        return True
+    # Collect row indices by error category
+    invalid_charging, invalid_trip, invalid_idle = [], [], []
+    unknown_trip, unknown_activity = [], []
+    generic_errors = []
 
     for idx, row in df.iterrows():
         try:
-            activity, energy, minutes = row['activity'], row['energy consumption'], row['time_taken'].total_seconds() / 60
+            activity = row['activity']
+            energy = row['energy consumption']
+            minutes = row['time_taken'].total_seconds() / 60
 
             if activity == 'charging':
-                low, high = -charge_speed_assumed * minutes * low_charge_rate, -charge_speed_assumed * minutes * high_charge_rate
-                if not validate_range(idx, energy, high, low, "Charging"):
+                low = -charge_speed_assumed * minutes * low_charge_rate
+                high = -charge_speed_assumed * minutes * high_charge_rate
+                if not (high <= energy <= low):
+                    invalid_charging.append(idx)
                     df.at[idx, 'energy consumption'] = -charge_speed_assumed * minutes
 
             elif activity in ('material trip', 'service trip'):
-                km = distance_lookup.get((row['start location'], row['end location']), None)
+                km = distance_lookup.get((row['start location'], row['end location']))
                 if km is None:
-                    errors.append(f"Row {idx}: Unknown trip {row['start location']} → {row['end location']}")
+                    unknown_trip.append(idx)
                     continue
                 km /= 1000
-                low, high = low_energy_use * km, high_energy_use * km
-                if not validate_range(idx, energy, low, high, "Trip"):
+                low = low_energy_use * km
+                high = high_energy_use * km
+                if not (low <= energy <= high):
+                    invalid_trip.append(idx)
                     df.at[idx, 'energy consumption'] = km * ((low_energy_use + high_energy_use) / 2)
+
             elif activity == 'idle':
                 base = (idle_cost_ph / 60) * minutes
-                low, high = base * low_idle_cost, base * high_idle_cost
-                if not validate_range(idx, energy, low, high, "Idle"):
+                low = base * low_idle_cost
+                high = base * high_idle_cost
+                if not (low <= energy <= high):
+                    invalid_idle.append(idx)
                     df.at[idx, 'energy consumption'] = base
 
             else:
-                errors.append(f"Row {idx}: Unknown activity type {activity}")
+                unknown_activity.append(idx)
 
         except Exception as e:
-            errors.append(f"Row {idx}: Error checking energy - {e}")
+            generic_errors.append((idx, str(e)))
+
+    # Summarize all errors in compact messages
+    if invalid_charging:
+        errors.append(f"Charging energy outside expected range at rows {invalid_charging}")
+    if invalid_trip:
+        errors.append(f"Trip energy outside expected range at rows {invalid_trip}")
+    if invalid_idle:
+        errors.append(f"Idle energy outside expected range at rows {invalid_idle}")
+    if unknown_trip:
+        errors.append(f"Unknown trip start/end combination at rows {unknown_trip}")
+    if unknown_activity:
+        errors.append(f"Unknown activity type at rows {unknown_activity}")
+    if generic_errors:
+        formatted = [f"Row {i}: {msg}" for i, msg in generic_errors]
+        errors.append("Unexpected validation errors:\n" + "\n".join(formatted))
 
     return df, errors
 
