@@ -338,7 +338,7 @@ def check_for_inaccuracies(df, timetable, distancematrix,
     try:
         location_errors = check_locations(df, timetable, distancematrix, discard)
         for err in location_errors:
-            report_error(f"Location error: {err}")
+            report_warning(f"Location error: {err}")
     except Exception as e:
         report_error("Error validating locations", e)
 
@@ -352,7 +352,7 @@ def check_for_inaccuracies(df, timetable, distancematrix,
     try:
         datetime_errors, continuity = check_datetime_sequence(df)
         for err in datetime_errors:
-            report_error(f"Datetime error: {err}")
+            report_warning(f"Datetime error: {err}, this is fixed automatically")
     except Exception as e:
         report_error("Error checking datetime sequence", e)
         continuity = pd.Series([True] * len(df))
@@ -375,7 +375,7 @@ def check_for_inaccuracies(df, timetable, distancematrix,
             low_idle_cost, high_idle_cost
         )
         for err in energy_errors:
-            report_error(f"Energy error: {err}")
+            report_warning(f"Energy error: {err}")
     except Exception as e:
         report_error("Energy check failed", e)
 
