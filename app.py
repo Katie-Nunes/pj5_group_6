@@ -86,7 +86,7 @@ with middle:
                 fig = avm.make_gantt(gantt_df_one)
                 st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
-                st.error(f"😬 Could not build Gantt chart.\nDetails: {e}")
+                st.error(f"Could not build Gantt chart.\nDetails: {e}")
                 logger.exception("Error building basic Gantt")
 
         # Improved, validated Gantt

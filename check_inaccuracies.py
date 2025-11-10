@@ -110,19 +110,40 @@ def check_locations(
 # -----------------------------
 # Time Handling
 # -----------------------------
+import pandas as pd
+from datetime import date, datetime
+
+
 def _coerce(series: pd.Series, ref_date: date) -> pd.Series:
-    """Convert time strings into datetime on a reference date."""
+    """Convert time strings into datetime on a reference date, handling invalid values."""
+    # Ensure the input is a string series to handle mixed types (e.g., numbers, NaN)
     s = series.astype(str)
+
+    t = None  # Initialize t to None
     for fmt in ("%H:%M:%S", "%H:%M", "%Y-%m-%d %H:%M:%S"):
         try:
-            t = pd.to_datetime(s, format=fmt).dt.time
-            break
-        except (ValueError, TypeError):
-            continue
-    else:
-        raise ValueError(f"Invalid time format in series: {s.tolist()[:5]} ...")
+            # Attempt to parse the entire series with the current format
+            parsed_datetime = pd.to_datetime(s, format=fmt, errors='coerce')
 
-    return pd.to_datetime([datetime.combine(ref_date, x) for x in t])
+            # Check if any values were successfully parsed
+            if parsed_datetime.notna().any():
+                t = parsed_datetime.dt.time
+                print(f"  - Successfully used format '{fmt}' to parse times.")
+                break  # Exit loop on the first successful format
+        except Exception as e:
+            # This catch is less likely to be hit now with errors='coerce',
+            # but kept for robustness.
+            print(f"  - Format '{fmt}' failed with error: {e}")
+            continue
+
+    if t is None:
+        # This block runs if no format could parse any value
+        raise ValueError(f"Could not parse any time values in series. Found formats: {s.unique().tolist()}")
+
+    # THE FIX: Handle NaT values before combining with the date
+    final_datetimes = [datetime.combine(ref_date, x) if not pd.isna(x) else pd.NaT for x in t]
+
+    return pd.to_datetime(final_datetimes)
 
 
 def rename_time_object(df: pd.DataFrame, start_name: str, end_name: str) -> pd.DataFrame:

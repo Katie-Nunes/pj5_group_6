@@ -38,9 +38,8 @@ def make_gantt(gantt_df: pd.DataFrame):
         xaxis_title="Time",
         yaxis_title="Bus ID",
         legend_title="Activity",
-        font=dict(size=13),
-        title_font=dict(size=22),
-        hoverlabel=dict(bgcolor="white", font_size=12),
+        font=dict(size=20),
+        title_font=dict(size=22)
     )
     return fig
 

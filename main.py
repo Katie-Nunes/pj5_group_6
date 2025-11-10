@@ -2,8 +2,6 @@ from check_inaccuracies import ensure_packages
 ensure_packages(['pandas', 'numpy', 'streamlit', 'plotly', 'xlsxwriter', 'datetime'])
 
 import pandas as pd
-from check_inaccuracies import check_for_inaccuracies, ensure_packages
-from check_feasbility import check_all_feasibility, fulfills_timetable
 from create_planning import create_planning
 import streamlit as st
 import logging

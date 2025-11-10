@@ -164,7 +164,7 @@ def run_bus_scheduler(departures_file, travel_times_file, output_file, garage_lo
     print(f"🚌 Total buses used: {total_buses}")
 
 run_bus_scheduler(
-    departures_file=r"Excel Files/Timetable.xlsx",
-    travel_times_file=r"Excel Files/DistanceMatrix.xlsx",
-    output_file="Excel Files/floodbusseswithout_battery.xlsx"
+    departures_file=r"../Excel Files/Timetable.xlsx",
+    travel_times_file=r"../Excel Files/DistanceMatrix.xlsx",
+    output_file="../Excel Files/floodbusseswithout_battery.xlsx"
 )

@@ -259,6 +259,7 @@ def create_garage_trips(timetable, distance_matrix, index, locations, charging_d
                                                bus_pre_depart_energy)
         return record, charging_record
 
+import numpy as np
 
 def main_timetable_iteration(timetable, distance_matrix, locations, charging_dict):
     print("[MAIN ITERATION] Starting timetable iteration")
@@ -274,10 +275,11 @@ def main_timetable_iteration(timetable, distance_matrix, locations, charging_dic
         for column in timetable_cols:
             row_vals[column] = timetable.at[index, column]
 
+
         if not generated_data.empty:
             z = row_vals["start"]
             bussin = (locations[z])
-            bus_id = 0
+            bus_id += 0
 
             current_energy = generated_data["energy consumption"].iloc[
                 -1]  # Currently this does not handle multiple bus-lines in timetable or the first line not existing
@@ -342,7 +344,7 @@ def main_timetable_iteration(timetable, distance_matrix, locations, charging_dic
     return generated_data
 
 
-def create_planning(timetable, distance_matrix):
+def main(timetable, distance_matrix):
     print("[CREATE PLANNING] Initializing planning process")
     locations = {loc: [] for loc in set(timetable['start']).union(timetable['end'])}
     print(f"  - Initialized locations: {list(locations.keys())}")
@@ -350,7 +352,7 @@ def create_planning(timetable, distance_matrix):
     print(f"  - Initialized charging dictionary")
 
     print(f"  - Renaming and sorting timetable by departure_time")
-    timetable = (rename_time_object(timetable, "departure_time", "Not Inside").sort_values(by="departure_time"))
+    timetable = (rename_time_object(timetable, "departure_time", "Not Inside"))# .sort_values(by="departure_time")
     print(f"  - Timetable sorted, {len(timetable)} rows")
 
     print(f"  - Starting main timetable iteration")
@@ -358,9 +360,17 @@ def create_planning(timetable, distance_matrix):
 
     print(f"  - Validating generated data structure")
     validate_dataframe_structure(generated_data, apply=True)
+    generated_data['start time'] = pd.to_datetime(generated_data['start time'])
+    generated_data['end time'] = pd.to_datetime(generated_data['end time'])
 
     print(f"  - Writing output to Excel: Excel Files/CREATED.xlsx")
-    generated_data.to_excel("Excel Files/CREATED.xlsx", index=False)
+    generated_data.to_excel("../Excel Files/CREATED.xlsx", index=False)
     print(f"[CREATE PLANNING] Planning complete! Generated {len(generated_data)} records")
 
     return generated_data
+
+if __name__ == "__main__":
+    PLANNING = pd.read_excel('../Excel Files/Bus Planning.xlsx')
+    TIMETABLE = pd.read_excel('../Excel Files/Timetable.xlsx')
+    DISTANCEMATRIX = pd.read_excel('../Excel Files/DistanceMatrix.xlsx')
+    main(TIMETABLE, DISTANCEMATRIX)
