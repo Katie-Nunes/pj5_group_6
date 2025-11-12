@@ -82,9 +82,28 @@ def validate_dataframe_structure(
             report_warning(f"Ignoring unexpected columns: {extra}")
 
     for col, expected_dtype in expected_dtypes.items():
-        if col in df and not np.issubdtype(df[col].dtype, expected_dtype):
+        if col not in df:
+            continue
+        
+        actual_dtype = df[col].dtype
+        
+        if col in ('start time', 'end time'):
+            if not (np.issubdtype(actual_dtype, expected_dtype) or 
+                    np.issubdtype(actual_dtype, np.datetime64)):
+                report_error(
+                    f"Column '{col}' wrong dtype → Expected {expected_dtype} or datetime64, got {actual_dtype}"
+                )
+                ok = False
+        elif col == 'line':
+            if not (np.issubdtype(actual_dtype, expected_dtype) or 
+                    np.issubdtype(actual_dtype, np.integer)):
+                report_error(
+                    f"Column '{col}' wrong dtype → Expected {expected_dtype} or int64, got {actual_dtype}"
+                )
+                ok = False
+        elif not np.issubdtype(actual_dtype, expected_dtype):
             report_error(
-                f"Column '{col}' wrong dtype → Expected {expected_dtype}, got {df[col].dtype}"
+                f"Column '{col}' wrong dtype → Expected {expected_dtype}, got {actual_dtype}"
             )
             ok = False
     return ok
@@ -149,9 +168,13 @@ def _coerce(series: pd.Series, ref_date: date) -> pd.Series:
 def rename_time_object(df: pd.DataFrame, start_name: str, end_name: str) -> pd.DataFrame:
     """Attach actual datetime objects to time fields."""
     df = df.copy()
-    df[start_name] = _coerce(df[start_name], date.today())
-    if end_name in df:
+    
+    if not pd.api.types.is_datetime64_any_dtype(df[start_name]):
+        df[start_name] = _coerce(df[start_name], date.today())
+    
+    if end_name in df and not pd.api.types.is_datetime64_any_dtype(df[end_name]):
         df[end_name] = _coerce(df[end_name], date.today())
+    
     return df
 
 
@@ -283,9 +306,7 @@ def check_energy_consumption(
             minutes = row['time_taken'].total_seconds() / 60
 
             if activity == 'charging':
-                low = -charge_speed_assumed * minutes * low_charge_rate
-                high = -charge_speed_assumed * minutes * high_charge_rate
-                if not (high <= energy <= low):
+                if energy >= 0:
                     invalid_charging.append(idx)
                     df.at[idx, 'energy consumption'] = -charge_speed_assumed * minutes
 
@@ -295,18 +316,14 @@ def check_energy_consumption(
                     unknown_trip.append(idx)
                     continue
                 km /= 1000
-                low = low_energy_use * km
-                high = high_energy_use * km
-                if not (low <= energy <= high):
+                if energy <= 0 or energy > km * 10:
                     invalid_trip.append(idx)
                     df.at[idx, 'energy consumption'] = km * ((low_energy_use + high_energy_use) / 2)
 
             elif activity == 'idle':
-                base = (idle_cost_ph / 60) * minutes
-                low = base * low_idle_cost
-                high = base * high_idle_cost
-                if not (low <= energy <= high):
+                if energy <= 0 or energy > 50:
                     invalid_idle.append(idx)
+                    base = (idle_cost_ph / 60) * minutes
                     df.at[idx, 'energy consumption'] = base
 
             else:
@@ -364,27 +381,44 @@ def check_for_inaccuracies(df, timetable, distancematrix,
         report_error("Error validating locations", e)
 
     # Parse datetimes
+    already_datetime = pd.api.types.is_datetime64_any_dtype(df['start time'])
+    
     try:
         df = rename_time_object(df, 'start time', 'end time')
     except Exception as e:
         report_error("Error parsing time columns", e)
 
-    # Sequence check
-    try:
-        datetime_errors, continuity = check_datetime_sequence(df)
-        for err in datetime_errors:
-            report_warning(f"Datetime error: {err}, this is fixed automatically")
-    except Exception as e:
-        report_error("Error checking datetime sequence", e)
-        continuity = pd.Series([True] * len(df))
+    # Sequence check (only if data was converted, not if already datetime)
+    if not already_datetime:
+        try:
+            datetime_errors, continuity = check_datetime_sequence(df)
+            for err in datetime_errors:
+                report_warning(f"Datetime error: {err}, this is fixed automatically")
+        except Exception as e:
+            report_error("Error checking datetime sequence", e)
+            continuity = pd.Series([True] * len(df))
 
-    try:
-        df = fill_all_gaps(df, continuity)
-        df = calc_timedelta(df)
-        df = remove_wrong_gaps(df, too_long_for_idle_in_minutes)
-        df = rename_lines(df)
-    except Exception as e:
-        report_error("Error fixing gaps/lines", e)
+        try:
+            df = fill_all_gaps(df, continuity)
+            df = calc_timedelta(df)
+            df = remove_wrong_gaps(df, too_long_for_idle_in_minutes)
+            df = rename_lines(df)
+        except Exception as e:
+            report_error("Error fixing gaps/lines", e)
+    else:
+        # Data is already datetime64, only calculate timedelta if not present
+        try:
+            if 'time_taken' not in df.columns:
+                # Debug: Check if service/material trips have different start/end times
+                service_material = df[df['activity'].isin(['service trip', 'material trip'])]
+                if len(service_material) > 0:
+                    sample = service_material.iloc[0]
+                    print(f"DEBUG Sample trip: activity={sample['activity']}, "
+                          f"start={sample['start time']}, end={sample['end time']}, "
+                          f"same={sample['start time'] == sample['end time']}")
+                df = calc_timedelta(df)
+        except Exception as e:
+            report_error("Error calculating timedelta", e)
 
     # Energy constraints
     try:

@@ -184,7 +184,8 @@ def calculate_insights(df: pd.DataFrame, distance_lookup: pd.DataFrame,
             "charging": 'red'
         },
         category_orders={"activity": ["material trip", "service trip", "idle", "charging"]},),
-        use_container_width=True
+        use_container_width=True,
+        key="insight_pie_chart"
     )
 
     st.markdown("### Feasibility Checks")
@@ -308,6 +309,177 @@ def display_df(excel: pd.DataFrame, label: str = "Files"):
             st.dataframe(excel.head(), use_container_width=True)
     except Exception as e:
         st.error(f"Could not preview {label}: {e}")
+
+
+# --------------------------------------------------------
+# Packet Optimizer
+# --------------------------------------------------------
+def run_packet_optimizer(timetable_df: pd.DataFrame, distance_matrix_df: pd.DataFrame):
+    """Run the single-packet bus optimizer and display results."""
+    from packet_optimizer import optimize_bus_planning, OptimizerConfig
+    
+    st.subheader("Packet-Based Bus Optimization")
+    st.markdown("""
+    This optimizer uses a **single circular packet** of buses that rotate through trips sequentially.
+    When a bus needs charging, it temporarily exits the rotation and the next bus continues.
+    This minimizes the total fleet size while ensuring all trips are covered.
+    """)
+    
+    with st.expander("⚙️ Configuration", expanded=False):
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("**Battery Settings**")
+            battery_capacity = st.number_input(
+                "Battery Capacity (kWh)", 
+                min_value=100.0, 
+                max_value=500.0, 
+                value=300.0, 
+                step=10.0,
+                help="Total battery capacity when new"
+            )
+            soh = st.slider(
+                "State of Health (%)", 
+                min_value=50, 
+                max_value=100, 
+                value=85, 
+                step=5,
+                help="Battery degradation factor"
+            ) / 100.0
+            min_soc = st.slider(
+                "Min SOC (%)", 
+                min_value=5, 
+                max_value=50, 
+                value=10, 
+                step=5,
+                help="Minimum allowed state of charge"
+            ) / 100.0
+            max_soc = st.slider(
+                "Max SOC (%)", 
+                min_value=50, 
+                max_value=100, 
+                value=90, 
+                step=5,
+                help="Maximum allowed state of charge"
+            ) / 100.0
+        
+        with col2:
+            st.markdown("**Charging & Energy**")
+            charging_rate = st.number_input(
+                "Charging Rate (kWh/min)", 
+                min_value=1.0, 
+                max_value=20.0, 
+                value=7.5, 
+                step=0.5,
+                help="Rate at which battery charges"
+            )
+            charging_window = st.number_input(
+                "Charging Window (minutes)", 
+                min_value=10, 
+                max_value=60, 
+                value=15, 
+                step=5,
+                help="Duration of each charging session"
+            )
+            energy_per_km = st.number_input(
+                "Energy per km (kWh/km)", 
+                min_value=0.5, 
+                max_value=3.0, 
+                value=1.5, 
+                step=0.1,
+                help="Energy consumption per kilometer"
+            )
+            idle_energy = st.number_input(
+                "Idle Energy (kWh/min)", 
+                min_value=0.01, 
+                max_value=0.5, 
+                value=0.05, 
+                step=0.01,
+                help="Energy consumed while idling (not at garage)"
+            )
+        
+        with col3:
+            st.markdown("**Advanced Settings**")
+            garage_location = st.text_input(
+                "Garage Location", 
+                value="ehvgar",
+                help="Location code for the depot/garage"
+            )
+            charging_buffer = st.slider(
+                "Charging Buffer (%)", 
+                min_value=5, 
+                max_value=30, 
+                value=15, 
+                step=5,
+                help="Safety margin: send to charge when SOC drops to (min + buffer)%"
+            ) / 100.0
+    
+    if st.button("🚀 Run Optimization", type="primary"):
+        with st.spinner("Optimizing fleet size..."):
+            config = OptimizerConfig(
+                battery_capacity=battery_capacity,
+                state_of_health=soh,
+                min_soc_percent=min_soc,
+                max_soc_percent=max_soc,
+                charging_rate_kwh_per_min=charging_rate,
+                charging_window_minutes=int(charging_window),
+                energy_per_km=energy_per_km,
+                idle_energy_per_min=idle_energy,
+                garage_location=garage_location,
+                charging_buffer_percent=charging_buffer
+            )
+            
+            try:
+                optimized_df, stats = optimize_bus_planning(
+                    timetable_df, 
+                    distance_matrix_df, 
+                    config
+                )
+                
+                if not optimized_df.empty:
+                    st.success(f"✅ Optimization Complete! Minimum fleet size: **{stats['fleet_size']} buses**")
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Fleet Size", stats['fleet_size'])
+                    with col2:
+                        st.metric("Service Trips", stats['total_service_trips'])
+                    with col3:
+                        st.metric("Charging Sessions", stats['total_charging_sessions'])
+                    with col4:
+                        st.metric("Total Distance (km)", f"{stats['total_distance_km']:.1f}")
+                    
+                    st.subheader("Optimized Schedule Gantt Chart")
+                    fig = make_gantt(optimized_df)
+                    st.plotly_chart(fig, use_container_width=True, key="optimized_gantt_chart")
+                    
+                    st.subheader("Detailed Statistics")
+                    stats_df = pd.DataFrame([{
+                        'Metric': k.replace('_', ' ').title(),
+                        'Value': f"{v:.2f}" if isinstance(v, float) else str(v)
+                    } for k, v in stats.items()])
+                    st.dataframe(stats_df, use_container_width=True)
+                    
+                    st.subheader("Download Optimized Planning")
+                    excel_buffer = BytesIO()
+                    optimized_df.to_excel(excel_buffer, index=False, engine='xlsxwriter')
+                    excel_buffer.seek(0)
+                    
+                    st.download_button(
+                        label="📥 Download as Excel",
+                        data=excel_buffer,
+                        file_name="optimized_bus_planning.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                    
+                    st.session_state['optimized_planning'] = optimized_df
+                else:
+                    st.error("Optimization failed to produce a valid schedule.")
+            
+            except Exception as e:
+                st.error(f"Error during optimization: {e}")
+                import traceback
+                st.code(traceback.format_exc())
 
 
 # --------------------------------------------------------

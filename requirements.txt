@@ -5,3 +5,9 @@ plotly
 xlsxwriter
 datetime
 openpyxl
+numpy
+openpyxl
+pandas
+plotly
+streamlit
+xlsxwriter

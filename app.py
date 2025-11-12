@@ -1,23 +1,26 @@
 from check_inaccuracies import ensure_packages
 ensure_packages(['pandas', 'numpy', 'streamlit', 'plotly', 'xlsxwriter', 'datetime'])
 
-
+import pandas as pd
 import streamlit as st
 import logging
 from check_inaccuracies import check_for_inaccuracies, rename_time_object
 import app_visualization_functions as avm
 from logging_utils import report_error, report_warning, report_info
 
-if 'battery_capacity' in st.session_state:
-    full_new_battery = st.session_state.battery_capacity
-if 'soh' in st.session_state:
-    state_of_health_frac = st.session_state.soh
-if 'charge_range' in st.session_state:
-    low, high = st.session_state.charge_range
-if 'min_charge_minutes' in st.session_state:
-    min_charging_minutes = st.session_state.min_charge_minutes
-if 'start_end_location' in st.session_state:
-    start_end_location = st.session_state.start_end_location
+# Initialize default configuration values in session state (FIX: Initialize before reading)
+st.session_state.setdefault('battery_capacity', 300)
+st.session_state.setdefault('soh', 0.85)
+st.session_state.setdefault('charge_range', (0.1, 0.9))
+st.session_state.setdefault('min_charge_minutes', 15)
+st.session_state.setdefault('start_end_location', 'ehvgar')
+
+# Now safely read from session state (guaranteed to exist)
+full_new_battery = st.session_state.battery_capacity
+state_of_health_frac = st.session_state.soh
+low, high = st.session_state.charge_range
+min_charging_minutes = st.session_state.min_charge_minutes
+start_end_location = st.session_state.start_end_location
 
 # --------------------------------------------------------
 # Setup
@@ -64,7 +67,7 @@ with right:
 # --------------------------------------------------------
 with middle:
     st.header("Production")
-    tab_visualize, tab_inspect, tab_insight = st.tabs(["Visualize", "Inspect", "Insight"])
+    tab_visualize, tab_inspect, tab_insight, tab_optimize = st.tabs(["Visualize", "Inspect", "Insight", "Optimize"])
 
     # =================================================================
     # Tab 1: Visualize
@@ -84,7 +87,7 @@ with middle:
                     f"{gantt_df_one['bus'].nunique()} bus(es)."
                 )
                 fig = avm.make_gantt(gantt_df_one)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, key="basic_gantt_chart")
             except Exception as e:
                 st.error(f"Could not build Gantt chart.\nDetails: {e}")
                 logger.exception("Error building basic Gantt")
@@ -96,11 +99,23 @@ with middle:
         else:
             try:
                 gantt_df = check_for_inaccuracies(planning_df, timetable_df, distancematrix_df)
+                
+                # Debug: Check activity distribution
+                activity_counts = gantt_df['activity'].value_counts()
+                logger.info(f"Activity distribution: {activity_counts.to_dict()}")
+                
+                # Debug: Check for zero-duration rows
+                if 'time_taken' in gantt_df.columns:
+                    zero_duration = gantt_df[gantt_df['time_taken'] <= pd.Timedelta(0)]
+                    if len(zero_duration) > 0:
+                        logger.warning(f"Found {len(zero_duration)} rows with zero or negative duration")
+                        logger.warning(f"Activities: {zero_duration['activity'].value_counts().to_dict()}")
+                
                 st.toast(
                     f" ᕙ(  •̀ ᗜ •́  )ᕗ Corrected {len(gantt_df)} trips."
                     f" Covering {gantt_df['bus'].nunique()} bus(es)."
                 )
-                st.plotly_chart(avm.make_gantt(gantt_df), use_container_width=True)
+                st.plotly_chart(avm.make_gantt(gantt_df), use_container_width=True, key="improved_gantt_chart")
             except Exception as e:
                 st.error(f"( ｡ •̀ ᴖ •́ ｡)  Could not build improved Gantt chart.\nDetails: {e}")
                 logger.exception("Error building improved Gantt")
@@ -149,6 +164,19 @@ with tab_insight:
             st.error(f" Could not calculate insights.\nDetails: {e}")
             import logging
             logging.exception("Error calculating insights")
+
+    # =================================================================
+    # Tab 4: Optimize
+    # =================================================================
+    with tab_optimize:
+        if timetable_df is None or distancematrix_df is None:
+            st.info("Upload **Timetable** and **Distance Matrix** to run optimization.")
+        else:
+            try:
+                avm.run_packet_optimizer(timetable_df, distancematrix_df)
+            except Exception as e:
+                st.error(f"Could not run optimizer.\nDetails: {e}")
+                logger.exception("Error running packet optimizer")
 
 # --------------------------------------------------------
 # Bottom Export
