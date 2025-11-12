@@ -36,16 +36,16 @@ import plotly.express as px
 # CONFIG
 # ----------------------------
 CONFIG = {
-    "INPUT_DIR": "assignment",
+    "INPUT_DIR": "../Excel Files",
     "TIMETABLE_FILE": "Timetable.xlsx",
     "DIST_FILE": "DistanceMatrix.xlsx",
     "BUSPLAN_FILE": "Bus Planning.xlsx",
-    "OUTPUT_DIR": "output",
+    "OUTPUT_DIR": "../Excel Files",
 
     # battery & energy model
     "battery_capacity_kwh": 300.0,
-    "initial_soc_percent": 90.0,
-    "soh_percent": 100.0,
+    "initial_soc_percent": 100.0,
+    "soh_percent": 85.0,
     "min_soc_percent_of_soh": 10.0,
 
     # consumption
@@ -54,7 +54,7 @@ CONFIG = {
 
     # charging
     "charging_location_hints": ["depot","garage","charging","charge","apt","ehvapt"],
-    "charging_location": None,
+    "charging_location": 'ehvgar',
     "charging_station_capacity": 40,
     "high_power_kw": 450.0,
     "low_power_kw": 60.0,

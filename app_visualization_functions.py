@@ -25,6 +25,13 @@ def make_gantt(gantt_df: pd.DataFrame):
         x_end="end time",
         y="bus",
         color="activity",
+        color_discrete_map={
+            "material trip": 'rgba(131, 201, 255)',
+            "service trip": 'rgba(0, 104, 201)',
+            "idle": 'rgba(255, 171, 171)',
+            "charging": 'red'
+        },
+        category_orders={"activity": ["material trip", "service trip", "idle", "charging"]},
         hover_data=[
             "start location",
             "end location",
@@ -39,7 +46,8 @@ def make_gantt(gantt_df: pd.DataFrame):
         yaxis_title="Bus ID",
         legend_title="Activity",
         font=dict(size=20),
-        title_font=dict(size=22)
+        title_font=dict(size=22),
+
     )
     return fig
 
@@ -167,7 +175,15 @@ def calculate_insights(df: pd.DataFrame, distance_lookup: pd.DataFrame,
     })
     st.plotly_chart(px.pie(
         pie_df, names="Activity", values="Time (hours)",
-        title="Total Time Distribution", hole=0.3),
+        title="Total Time Distribution", hole=0.3,
+        color="Activity",
+        color_discrete_map={
+            "material trip": 'rgba(131, 201, 255)',
+            "service trip": 'rgba(0, 104, 201)',
+            "idle": 'rgba(255, 171, 171)',
+            "charging": 'red'
+        },
+        category_orders={"activity": ["material trip", "service trip", "idle", "charging"]},),
         use_container_width=True
     )
 

@@ -48,7 +48,7 @@ def validate_start_end_locations(df, start_end_location="ehvgar"):
     ]
     if not not_ok.empty:
         failed_indices = not_ok.index.tolist()
-        report_warning(f"Some buses do not start/end at depot {failed_indices}")
+        report_warning(f"Some buses do not start/end at depot. Failed at rows: {failed_indices}")
     return not_ok
 
 def minimum_charging(df, min_charging_minutes=15):
@@ -57,7 +57,7 @@ def minimum_charging(df, min_charging_minutes=15):
     bad = charging[charging['time_taken'] < threshold]
     if not bad.empty:
         failed_indices = bad.index.tolist()
-        report_warning(f"Some charging blocks are shorter than minimum allowed {failed_indices}")
+        report_warning(f"Some charging blocks are shorter than minimum allowed. Failed at rows: {failed_indices}")
     return bad
 
 def fulfills_timetable(df, timetable_df):
