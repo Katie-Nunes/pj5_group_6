@@ -160,33 +160,37 @@ def calculate_insights(df: pd.DataFrame, distance_lookup: pd.DataFrame,
         "Status": [status_bus, status_prod, status_unp, status_epkm]
     })
 
-    st.markdown("### Performance KPIs")
-    st.dataframe(insights_df.style.map(
-        lambda val: "background-color:#4CAF50; color:white" if "ᕙ(  •̀ ᗜ •́  )ᕗ" in str(val)
-        else ("background-color:#FFEB3B; color:black" if " (╥ᆺ╥；) " in str(val)
-              else ("background-color:#F44336; color:white" if "( ｡ •̀ ᴖ •́ ｡)" in str(val) else "")),
-        subset=["Status"]
-    ), use_container_width=True)
-
-    # Pie chart
-    pie_df = pd.DataFrame({
-        "Activity": activity_sums.index,
-        "Time (hours)": activity_sums.dt.total_seconds() / 3600
-    })
-    st.plotly_chart(px.pie(
-        pie_df, names="Activity", values="Time (hours)",
-        title="Total Time Distribution", hole=0.3,
-        color="Activity",
-        color_discrete_map={
-            "material trip": 'rgba(131, 201, 255)',
-            "service trip": 'rgba(0, 104, 201)',
-            "idle": 'rgba(255, 171, 171)',
-            "charging": 'red'
-        },
-        category_orders={"activity": ["material trip", "service trip", "idle", "charging"]},),
-        use_container_width=True,
-        key="insight_pie_chart"
-    )
+    # Display KPIs and Pie Chart side by side
+    col_kpi, col_pie = st.columns(2)
+    
+    with col_kpi:
+        st.markdown("### Performance KPIs")
+        st.dataframe(insights_df.style.map(
+            lambda val: "background-color:#4CAF50; color:white" if "ᕙ(  •̀ ᗜ •́  )ᕗ" in str(val)
+            else ("background-color:#FFEB3B; color:black" if " (╥ᆺ╥；) " in str(val)
+                  else ("background-color:#F44336; color:white" if "( ｡ •̀ ᴖ •́ ｡)" in str(val) else "")),
+            subset=["Status"]
+        ), use_container_width=True)
+    
+    with col_pie:
+        st.markdown("### Time Distribution")
+        pie_df = pd.DataFrame({
+            "Activity": activity_sums.index,
+            "Time (hours)": activity_sums.dt.total_seconds() / 3600
+        })
+        st.plotly_chart(px.pie(
+            pie_df, names="Activity", values="Time (hours)",
+            title="", hole=0.3,
+            color="Activity",
+            color_discrete_map={
+                "material trip": 'rgba(131, 201, 255)',
+                "service trip": 'rgba(0, 104, 201)',
+                "idle": 'rgba(255, 171, 171)',
+                "charging": 'red'
+            },
+            category_orders={"activity": ["material trip", "service trip", "idle", "charging"]},),
+            use_container_width=True
+        )
 
     st.markdown("### Feasibility Checks")
     df_soc, initial_charge = energy_state(df, full_new_battery, state_of_health_frac)
@@ -315,7 +319,7 @@ def display_df(excel: pd.DataFrame, label: str = "Files"):
 # Packet Optimizer
 # --------------------------------------------------------
 def run_packet_optimizer(timetable_df: pd.DataFrame, distance_matrix_df: pd.DataFrame):
-    """Run the single-packet bus optimizer and display results."""
+    """Run the single-packet bus optimizer and display results. Returns the optimized dataframe."""
     from packet_optimizer import optimize_bus_planning, OptimizerConfig
     
     st.subheader("Packet-Based Bus Optimization")
@@ -325,7 +329,7 @@ def run_packet_optimizer(timetable_df: pd.DataFrame, distance_matrix_df: pd.Data
     This minimizes the total fleet size while ensuring all trips are covered.
     """)
     
-    with st.expander("⚙️ Configuration", expanded=False):
+    with st.expander("Configuration", expanded=False):
         col1, col2, col3 = st.columns(3)
         
         with col1:
@@ -414,7 +418,7 @@ def run_packet_optimizer(timetable_df: pd.DataFrame, distance_matrix_df: pd.Data
                 help="Safety margin: send to charge when SOC drops to (min + buffer)%"
             ) / 100.0
     
-    if st.button("🚀 Run Optimization", type="primary"):
+    if st.button("Run Optimization", type="primary"):
         with st.spinner("Optimizing fleet size..."):
             config = OptimizerConfig(
                 battery_capacity=battery_capacity,
@@ -437,7 +441,10 @@ def run_packet_optimizer(timetable_df: pd.DataFrame, distance_matrix_df: pd.Data
                 )
                 
                 if not optimized_df.empty:
-                    st.success(f"✅ Optimization Complete! Minimum fleet size: **{stats['fleet_size']} buses**")
+                    # Add time_taken column if missing
+                    if 'time_taken' not in optimized_df.columns:
+                        optimized_df['time_taken'] = optimized_df['end time'] - optimized_df['start time']
+                    st.success(f"ᕙ(  •̀ ᗜ •́  )ᕗ Optimization Complete! Minimum fleet size: **{stats['fleet_size']} buses**")
                     
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
@@ -466,20 +473,27 @@ def run_packet_optimizer(timetable_df: pd.DataFrame, distance_matrix_df: pd.Data
                     excel_buffer.seek(0)
                     
                     st.download_button(
-                        label="📥 Download as Excel",
+                        label="Download as Excel",
                         data=excel_buffer,
                         file_name="optimized_bus_planning.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
                     
-                    st.session_state['optimized_planning'] = optimized_df
+                    # Store in session state for cross-tab access
+                    st.session_state.optimizer_gantt_df = optimized_df
+                    # Force page rerun so other tabs can see the new data
+                    st.rerun()
                 else:
-                    st.error("Optimization failed to produce a valid schedule.")
+                    st.error("( ｡ •̀ ᴖ •́ ｡) Optimization failed to produce a valid schedule.")
+                    return None
             
             except Exception as e:
-                st.error(f"Error during optimization: {e}")
+                st.error(f"( ｡ •̀ ᴖ •́ ｡) Error during optimization: {e}")
                 import traceback
                 st.code(traceback.format_exc())
+                return None
+    
+    return None
 
 
 # --------------------------------------------------------

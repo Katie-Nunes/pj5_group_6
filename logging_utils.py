@@ -61,4 +61,4 @@ def report_info(msg: str, user: bool = False) -> None:
     """
     logger.info(msg)
     if user:
-        st.info(f"ℹ️{msg}")
+        st.info(msg)
